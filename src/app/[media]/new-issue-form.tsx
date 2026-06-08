@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createIssue } from "@/lib/actions/issues";
+import { useStore } from "@/lib/store";
+import type { MediaId } from "@/lib/config/media";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,11 +16,12 @@ export function NewIssueForm({
   hasLayout,
   pageOptions,
 }: {
-  mediaId: string;
+  mediaId: MediaId;
   hasLayout: boolean;
   pageOptions?: number[];
 }) {
   const router = useRouter();
+  const addIssue = useStore((s) => s.addIssue);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -31,21 +33,20 @@ export function NewIssueForm({
 
   function submit() {
     startTransition(async () => {
-      const res = await createIssue({
+      const issue = await addIssue({
         mediaId,
-        name: name || `${year}年${month}月号`,
+        name: name.trim() || `${year}年${month}月号`,
         year,
         month,
         pageCount: hasLayout ? pageCount : null,
       });
-      if (res.ok) {
+      if (issue) {
         toast.success("号数を作成しました");
         setOpen(false);
         setName("");
-        router.refresh();
-        if (res.issueId) router.push(`/${mediaId}/${res.issueId}`);
+        router.push(`/${mediaId}/${issue.id}`);
       } else {
-        toast.error(res.message ?? "作成に失敗しました");
+        toast.error("作成に失敗しました（ログイン状態をご確認ください）");
       }
     });
   }

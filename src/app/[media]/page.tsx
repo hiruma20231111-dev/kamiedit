@@ -1,27 +1,30 @@
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MEDIA, type MediaId } from "@/lib/config/media";
 import { THEME_STYLES } from "@/lib/theme";
-import { getSession } from "@/lib/auth";
-import { getIssues } from "@/lib/data";
+import { useStore } from "@/lib/store";
 import { NewIssueForm } from "./new-issue-form";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react";
 
-export default async function MediaPage({
+export default function MediaPage({
   params,
 }: {
   params: Promise<{ media: string }>;
 }) {
-  const { media: mediaId } = await params;
+  const { media: mediaId } = use(params);
   const media = MEDIA[mediaId as MediaId];
   if (!media) notFound();
 
   const style = THEME_STYLES[media.theme];
-  const [{ isEditor }, issues] = await Promise.all([
-    getSession(),
-    getIssues(media.id),
-  ]);
+  const signedIn = useStore((s) => s.signedIn);
+  const loading = useStore((s) => s.loading);
+  const issues = useStore((s) =>
+    s.db.issues.filter((i) => i.media_id === media.id),
+  );
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -38,13 +41,15 @@ export default async function MediaPage({
       >
         <h1 className="text-2xl font-bold">{media.name}</h1>
         <p className="mt-1 text-sm text-white/90">
-          {media.hasLayout ? "割付表で枠を確保して原稿を作成" : "原稿一覧から直接作成"}
+          {media.hasLayout
+            ? "割付表で枠を確保して原稿を作成"
+            : "原稿一覧から直接作成"}
         </p>
       </div>
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between gap-4">
         <h2 className="text-lg font-semibold">号数を選択</h2>
-        {isEditor && (
+        {signedIn && (
           <NewIssueForm
             mediaId={media.id}
             hasLayout={media.hasLayout}
@@ -56,20 +61,20 @@ export default async function MediaPage({
       {issues.length === 0 ? (
         <Card className={`p-10 text-center ${style.softBg}`}>
           <BookOpen className={`mx-auto h-10 w-10 ${style.text}`} />
-          <p className="mt-3 font-medium">まだ号数がありません</p>
+          <p className="mt-3 font-medium">
+            {loading ? "読み込み中…" : "まだ号数がありません"}
+          </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isEditor
+            {signedIn
               ? "「新規号を作成」から最初の号を追加してください。"
-              : "編集者が号数を作成するまでお待ちください。"}
+              : "編集・保存には右上から Google ログインしてください。"}
           </p>
         </Card>
       ) : (
         <div className="space-y-3">
           {issues.map((issue) => (
             <Link key={issue.id} href={`/${media.id}/${issue.id}`}>
-              <Card
-                className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50"
-              >
+              <Card className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50">
                 <div>
                   <p className="font-semibold">{issue.name}</p>
                   {media.hasLayout && issue.page_count && (

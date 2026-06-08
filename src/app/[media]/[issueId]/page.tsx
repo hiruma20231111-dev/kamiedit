@@ -1,23 +1,25 @@
+"use client";
+
+import { use } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MEDIA, type MediaId } from "@/lib/config/media";
 import { THEME_STYLES } from "@/lib/theme";
-import { getIssue } from "@/lib/data";
-import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { useStore } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, LayoutGrid, List } from "lucide-react";
 
-export default async function IssuePage({
+export default function IssuePage({
   params,
 }: {
   params: Promise<{ media: string; issueId: string }>;
 }) {
-  const { media: mediaId, issueId } = await params;
+  const { media: mediaId, issueId } = use(params);
   const media = MEDIA[mediaId as MediaId];
   if (!media) notFound();
 
   const style = THEME_STYLES[media.theme];
-  const issue = hasSupabaseEnv() ? await getIssue(issueId) : null;
+  const issue = useStore((s) => s.db.issues.find((i) => i.id === issueId));
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -36,7 +38,9 @@ export default async function IssuePage({
         <h1 className="text-2xl font-bold">{issue?.name ?? "（号数）"}</h1>
       </div>
 
-      <Card className={`flex flex-col items-center p-12 text-center ${style.softBg}`}>
+      <Card
+        className={`flex flex-col items-center p-12 text-center ${style.softBg}`}
+      >
         {media.hasLayout ? (
           <LayoutGrid className={`h-12 w-12 ${style.text}`} />
         ) : (

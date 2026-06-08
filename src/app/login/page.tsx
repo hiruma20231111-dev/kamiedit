@@ -1,37 +1,36 @@
+"use client";
+
 import { LoginButton } from "@/components/auth-buttons";
 import { Card } from "@/components/ui/card";
-import { hasSupabaseEnv } from "@/lib/supabase/env";
+import { useStore } from "@/lib/store";
 
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; next?: string }>;
-}) {
-  const { error, next } = await searchParams;
-  const connected = hasSupabaseEnv();
+export default function LoginPage() {
+  const configured = useStore((s) => s.configured);
+  const error = useStore((s) => s.error);
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center px-4 py-20">
       <Card className="w-full p-8 text-center">
         <h1 className="text-2xl font-bold">ログイン</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          編集機能を使うには Google アカウントでログインしてください。
+          編集・保存には Google アカウントでログインしてください。
+          データはご自身の Google ドライブに保存されます。
         </p>
 
         {error && (
           <p className="mt-4 rounded-md bg-destructive/10 p-2 text-sm text-destructive">
-            ログインに失敗しました。もう一度お試しください。
+            {error}
           </p>
         )}
 
-        {!connected && (
+        {!configured && (
           <p className="mt-4 rounded-md border border-amber-400/60 bg-amber-50 p-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-            Supabase が未接続のため、現在ログインできません。
+            Google クライアントID が未設定のため、現在ログインできません。
           </p>
         )}
 
         <div className="mt-6 flex justify-center">
-          <LoginButton next={next ?? "/"} className="w-full" />
+          <LoginButton className="w-full" />
         </div>
       </Card>
     </div>

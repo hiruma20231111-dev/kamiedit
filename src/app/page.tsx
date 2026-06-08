@@ -1,12 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { MEDIA_LIST } from "@/lib/config/media";
 import { THEME_STYLES } from "@/lib/theme";
-import { getSession } from "@/lib/auth";
+import { useStore } from "@/lib/store";
 import { Card } from "@/components/ui/card";
 import { ArrowRight, LayoutGrid, List } from "lucide-react";
 
-export default async function Home() {
-  const { notConnected, user } = await getSession();
+export default function Home() {
+  const configured = useStore((s) => s.configured);
+  const signedIn = useStore((s) => s.signedIn);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10">
@@ -19,22 +22,23 @@ export default async function Home() {
         </p>
       </section>
 
-      {notConnected && (
+      {!configured && (
         <div className="mb-8 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          <p className="font-semibold">⚠️ Supabase が未接続です（プレビューモード）</p>
+          <p className="font-semibold">⚠️ Google が未接続です（プレビューモード）</p>
           <p className="mt-1">
-            ログイン・号数の保存にはセットアップが必要です。
+            データは各自の Google ドライブに保存します。利用するには
             <code className="mx-1 rounded bg-amber-100 px-1 dark:bg-amber-900/40">
-              .env.local
+              NEXT_PUBLIC_GOOGLE_CLIENT_ID
             </code>
-            に Supabase の URL / anon key を設定してください（README参照）。
+            を設定してください（README参照）。
           </p>
         </div>
       )}
 
-      {!notConnected && !user && (
+      {configured && !signedIn && (
         <div className="mb-8 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-          閲覧モードです。編集するには右上から Google ログインしてください。
+          閲覧モードです。編集・保存するには右上から Google ログインしてください
+          （データはご自身の Google ドライブに保存されます）。
         </div>
       )}
 

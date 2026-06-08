@@ -1,7 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User as UserIcon } from "lucide-react";
-import { toast } from "sonner";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -35,41 +33,28 @@ const GoogleIcon = () => (
   </svg>
 );
 
-export function LoginButton({
-  next = "/",
-  className,
-}: {
-  next?: string;
-  className?: string;
-}) {
-  async function signIn() {
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    if (error) toast.error(`ログインに失敗しました: ${error.message}`);
-  }
+export function LoginButton({ className }: { className?: string }) {
+  const signIn = useStore((s) => s.signIn);
+  const signingIn = useStore((s) => s.signingIn);
+  const configured = useStore((s) => s.configured);
 
   return (
-    <Button onClick={signIn} variant="outline" className={className}>
+    <Button
+      onClick={() => void signIn()}
+      variant="outline"
+      className={className}
+      disabled={signingIn || !configured}
+      title={configured ? undefined : "Google クライアントID が未設定です"}
+    >
       <GoogleIcon />
-      Googleでログイン
+      {signingIn ? "サインイン中..." : "Googleでログイン"}
     </Button>
   );
 }
 
-export function UserMenu({ email }: { email: string }) {
-  const router = useRouter();
-
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    toast.success("ログアウトしました");
-    router.refresh();
-  }
+export function UserMenu() {
+  const user = useStore((s) => s.user);
+  const signOut = useStore((s) => s.signOut);
 
   return (
     <DropdownMenu>
@@ -80,9 +65,11 @@ export function UserMenu({ email }: { email: string }) {
         <UserIcon className="h-5 w-5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate">{email}</DropdownMenuLabel>
+        <DropdownMenuLabel className="truncate">
+          {user?.email ?? "アカウント"}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={signOut}>
+        <DropdownMenuItem onClick={() => signOut()}>
           <LogOut className="mr-2 h-4 w-4" />
           ログアウト
         </DropdownMenuItem>

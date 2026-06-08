@@ -1,32 +1,10 @@
 /**
- * Google Identity Services (GIS) のトークン取得ラッパー（ブラウザ専用）。
+ * Google OAuth（リダイレクト方式 / implicit）。ポップアップを使わない。
+ *  - ログイン: 全ページ遷移で Google へ → /auth に #access_token で戻る
+ *  - 無UI更新: 同一オリジンの隠しiframe（prompt=none）で新トークンを取得
+ * これによりポップアップ→openerのpostMessage依存（本番で不安定）を回避する。
  */
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
-
-let scriptPromise: Promise<void> | null = null;
-
-/** GIS スクリプトを一度だけ読み込む */
-export function loadGisScript(): Promise<void> {
-  if (scriptPromise) return scriptPromise;
-  scriptPromise = new Promise((resolve, reject) => {
-    if (typeof window === "undefined") return resolve();
-    if (window.google?.accounts?.oauth2) return resolve();
-    const s = document.createElement("script");
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("GISスクリプトの読み込みに失敗しました"));
-    document.head.appendChild(s);
-  });
-  return scriptPromise;
-}
+import { GOOGLE_CLIENT_ID, SCOPES } from "./config";
 
 export interface GoogleUser {
   email: string;
@@ -36,43 +14,63 @@ export interface GoogleUser {
 
 export interface TokenResult {
   token: string;
-  /** 有効秒数（通常3600） */
   expiresIn: number;
 }
 
-/**
- * アクセストークンを取得する。
- * prompt: "" は無UIでの取得を試みる（セッションがあれば成功、無ければ失敗）。
- *          "consent"/"select_account" はUIを出す。
- */
-export async function getAccessToken(
-  clientId: string,
-  scope: string,
-  prompt: "" | "consent" | "select_account" = "",
-): Promise<TokenResult> {
-  await loadGisScript();
-  const google = window.google;
-  if (!google?.accounts?.oauth2) {
-    throw new Error("GISが利用できません");
-  }
+/** /auth を redirect_uri にした認可URLを生成 */
+export function buildAuthUrl(opts: {
+  prompt?: "none" | "consent" | "select_account";
+  state?: string;
+}): string {
+  const u = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  u.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+  u.searchParams.set("redirect_uri", `${window.location.origin}/auth`);
+  u.searchParams.set("response_type", "token");
+  u.searchParams.set("scope", SCOPES);
+  u.searchParams.set("include_granted_scopes", "true");
+  if (opts.state) u.searchParams.set("state", opts.state);
+  if (opts.prompt) u.searchParams.set("prompt", opts.prompt);
+  return u.toString();
+}
 
-  return new Promise<TokenResult>((resolve, reject) => {
-    const client = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope,
-      prompt,
-      callback: (resp: any) => {
-        if (resp?.error) return reject(new Error(resp.error));
-        if (!resp?.access_token) return reject(new Error("no_token"));
-        resolve({
-          token: resp.access_token as string,
-          expiresIn: Number(resp.expires_in) || 3600,
-        });
-      },
-      error_callback: (err: any) =>
-        reject(new Error(err?.type ?? "oauth_error")),
-    });
-    client.requestAccessToken({ prompt });
+/** ログイン開始（全ページ遷移） */
+export function startLogin(returnPath: string) {
+  window.location.assign(
+    buildAuthUrl({ state: encodeURIComponent(returnPath || "/") }),
+  );
+}
+
+/** 無UIでのトークン更新（隠しiframe・同一オリジンでpostMessage受信＝確実） */
+export function silentToken(): Promise<TokenResult | null> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(null);
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    let done = false;
+    const cleanup = () => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("message", onMsg);
+      iframe.remove();
+    };
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      const d = e.data as { type?: string; access_token?: string; expires_in?: string };
+      if (!d || d.type !== "kamiedit-auth") return;
+      cleanup();
+      if (d.access_token) {
+        resolve({ token: d.access_token, expiresIn: Number(d.expires_in) || 3600 });
+      } else {
+        resolve(null);
+      }
+    };
+    window.addEventListener("message", onMsg);
+    iframe.src = buildAuthUrl({ prompt: "none", state: "silent" });
+    document.body.appendChild(iframe);
+    setTimeout(() => {
+      cleanup();
+      resolve(null);
+    }, 10000);
   });
 }
 
@@ -89,7 +87,10 @@ export async function fetchUserInfo(token: string): Promise<GoogleUser> {
 /** トークンを失効させる（ログアウト用） */
 export function revokeToken(token: string) {
   try {
-    window.google?.accounts?.oauth2?.revoke(token, () => {});
+    void fetch(
+      `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`,
+      { method: "POST", mode: "no-cors" },
+    );
   } catch {
     // noop
   }

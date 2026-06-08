@@ -1,13 +1,10 @@
 "use client";
 
 import { create } from "zustand";
+import { hasGoogleEnv } from "@/lib/google/config";
 import {
-  GOOGLE_CLIENT_ID,
-  SCOPES,
-  hasGoogleEnv,
-} from "@/lib/google/config";
-import {
-  getAccessToken,
+  startLogin,
+  silentToken,
   fetchUserInfo,
   revokeToken,
   type GoogleUser,
@@ -40,6 +37,8 @@ interface StoreState {
 
   init: () => Promise<void>;
   signIn: () => Promise<void>;
+  /** /auth コールバックからトークンを受け取ってログイン確定 */
+  completeLogin: (token: string, expiresIn: number) => Promise<void>;
   signOut: () => void;
   reload: () => Promise<void>;
   addIssue: (input: {
@@ -155,6 +154,15 @@ export const useStore = create<StoreState>((set, get) => ({
   /** 起動時：保存済みセッションを復元、無ければ無UIサインインを試す */
   init: async () => {
     if (get().initialized) return;
+    // /auth コールバックや隠しiframe内では通常初期化をしない（二重処理防止）
+    if (
+      typeof window !== "undefined" &&
+      (window.parent !== window ||
+        window.location.pathname.startsWith("/auth"))
+    ) {
+      set({ initialized: true, configured: hasGoogleEnv() });
+      return;
+    }
     set({ initialized: true, configured: hasGoogleEnv() });
     if (!hasGoogleEnv()) return;
 
@@ -177,43 +185,46 @@ export const useStore = create<StoreState>((set, get) => ({
 
     // 失効していたら無UIで更新を試す（以前ログインしていたユーザーのみ）
     try {
-      const { token, expiresIn } = await getAccessToken(
-        GOOGLE_CLIENT_ID,
-        SCOPES,
-        "",
-      );
-      const user = await fetchUserInfo(token);
-      const expiresAt = Date.now() + expiresIn * 1000;
-      saveSession({ token, expiresAt, user });
-      set({ token, expiresAt, user, signedIn: true });
+      const r = await silentToken();
+      if (!r) {
+        clearSession();
+        set({ signedIn: false });
+        return;
+      }
+      const user = saved.user ?? (await fetchUserInfo(r.token));
+      const expiresAt = Date.now() + r.expiresIn * 1000;
+      saveSession({ token: r.token, expiresAt, user });
+      set({ token: r.token, expiresAt, user, signedIn: true });
       await get().reload();
     } catch {
       clearSession();
     }
   },
 
-  /** 明示的サインイン（UIあり） */
+  /** ログイン開始（全ページ遷移でGoogleへ） */
   signIn: async () => {
     if (!hasGoogleEnv()) {
       set({ error: "Google クライアントID が未設定です" });
       return;
     }
     set({ signingIn: true, error: null });
+    const path =
+      typeof window !== "undefined"
+        ? window.location.pathname + window.location.search
+        : "/";
+    startLogin(path);
+  },
+
+  /** /auth コールバックからログイン確定 */
+  completeLogin: async (token, expiresIn) => {
     try {
-      const { token, expiresIn } = await getAccessToken(
-        GOOGLE_CLIENT_ID,
-        SCOPES,
-        "consent",
-      );
       const user = await fetchUserInfo(token);
       const expiresAt = Date.now() + expiresIn * 1000;
       saveSession({ token, expiresAt, user });
-      set({ token, expiresAt, user, signedIn: true });
+      set({ token, expiresAt, user, signedIn: true, error: null });
       await get().reload();
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "サインインに失敗しました" });
-    } finally {
-      set({ signingIn: false });
     }
   },
 
@@ -237,17 +248,15 @@ export const useStore = create<StoreState>((set, get) => ({
     if (token && expiresAt && expiresAt > Date.now() + 60_000) {
       return token;
     }
-    // 失効間際 → 無UIで再取得
-    if (!hasGoogleEnv() || !user) return token; // フォールバック
-    try {
-      const res = await getAccessToken(GOOGLE_CLIENT_ID, SCOPES, "");
-      const newExpiry = Date.now() + res.expiresIn * 1000;
-      saveSession({ token: res.token, expiresAt: newExpiry, user });
-      set({ token: res.token, expiresAt: newExpiry });
-      return res.token;
-    } catch {
-      return token; // 取れなければ既存トークンで試す
-    }
+    // 失効間際 → 隠しiframeで無UI更新
+    if (!hasGoogleEnv()) return token;
+    const res = await silentToken();
+    if (!res) return token; // 取れなければ既存トークンで試す
+    const u = user ?? (await fetchUserInfo(res.token).catch(() => null));
+    const newExpiry = Date.now() + res.expiresIn * 1000;
+    if (u) saveSession({ token: res.token, expiresAt: newExpiry, user: u });
+    set({ token: res.token, expiresAt: newExpiry, ...(u ? { user: u } : {}) });
+    return res.token;
   },
 
   /** Drive からDBを読み込む（フォルダ/ファイルが無ければ作る） */

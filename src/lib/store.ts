@@ -30,6 +30,7 @@ interface StoreState {
   signedIn: boolean;
   user: GoogleUser | null;
   token: string | null;
+  expiresAt: number | null;
   folderId: string | null;
   dbFileId: string | null;
   db: DriveDB;
@@ -89,6 +90,8 @@ interface StoreState {
   ) => Promise<ManuscriptImage | null>;
   deleteImage: (imageId: string) => Promise<void>;
 
+  /** 有効なトークンを返す（失効間際なら無UIで再取得）。取得不可なら null */
+  ensureToken: () => Promise<string | null>;
   /** db を更新して Drive へ保存（失敗時ロールバック） */
   commit: (next: DriveDB) => Promise<boolean>;
 }
@@ -99,6 +102,41 @@ function uid(): string {
     : Math.random().toString(36).slice(2);
 }
 
+const SESSION_KEY = "kamiedit.session";
+
+interface PersistedSession {
+  token: string;
+  expiresAt: number;
+  user: GoogleUser;
+}
+
+function loadSession(): PersistedSession | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw) as PersistedSession;
+    if (!s?.token || !s?.expiresAt) return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(s: PersistedSession) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+  } catch {
+    // noop
+  }
+}
+
+function clearSession() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(SESSION_KEY);
+}
+
 export const useStore = create<StoreState>((set, get) => ({
   configured: hasGoogleEnv(),
   initialized: false,
@@ -106,6 +144,7 @@ export const useStore = create<StoreState>((set, get) => ({
   signedIn: false,
   user: null,
   token: null,
+  expiresAt: null,
   folderId: null,
   dbFileId: null,
   db: emptyDb(),
@@ -113,18 +152,43 @@ export const useStore = create<StoreState>((set, get) => ({
   saving: false,
   error: null,
 
-  /** 起動時：無UIでのサインインを試み、成功すればDBを読み込む */
+  /** 起動時：保存済みセッションを復元、無ければ無UIサインインを試す */
   init: async () => {
     if (get().initialized) return;
     set({ initialized: true, configured: hasGoogleEnv() });
     if (!hasGoogleEnv()) return;
+
+    // 過去にログインした記録（localStorage）がある時だけ自動復元/更新する。
+    // 記録が無い場合は何もしない（明示的なログインボタンを待つ）→ 不要なポップアップを防ぐ。
+    const saved = loadSession();
+    if (!saved) return;
+
+    // まだ有効ならそのまま復元
+    if (saved.expiresAt > Date.now() + 30_000) {
+      set({
+        token: saved.token,
+        expiresAt: saved.expiresAt,
+        user: saved.user,
+        signedIn: true,
+      });
+      await get().reload();
+      return;
+    }
+
+    // 失効していたら無UIで更新を試す（以前ログインしていたユーザーのみ）
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID, SCOPES, "");
+      const { token, expiresIn } = await getAccessToken(
+        GOOGLE_CLIENT_ID,
+        SCOPES,
+        "",
+      );
       const user = await fetchUserInfo(token);
-      set({ token, user, signedIn: true });
+      const expiresAt = Date.now() + expiresIn * 1000;
+      saveSession({ token, expiresAt, user });
+      set({ token, expiresAt, user, signedIn: true });
       await get().reload();
     } catch {
-      // セッションが無い等：未ログインのまま
+      clearSession();
     }
   },
 
@@ -136,9 +200,15 @@ export const useStore = create<StoreState>((set, get) => ({
     }
     set({ signingIn: true, error: null });
     try {
-      const token = await getAccessToken(GOOGLE_CLIENT_ID, SCOPES, "consent");
+      const { token, expiresIn } = await getAccessToken(
+        GOOGLE_CLIENT_ID,
+        SCOPES,
+        "consent",
+      );
       const user = await fetchUserInfo(token);
-      set({ token, user, signedIn: true });
+      const expiresAt = Date.now() + expiresIn * 1000;
+      saveSession({ token, expiresAt, user });
+      set({ token, expiresAt, user, signedIn: true });
       await get().reload();
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "サインインに失敗しました" });
@@ -150,19 +220,39 @@ export const useStore = create<StoreState>((set, get) => ({
   signOut: () => {
     const token = get().token;
     if (token) revokeToken(token);
+    clearSession();
     set({
       signedIn: false,
       user: null,
       token: null,
+      expiresAt: null,
       folderId: null,
       dbFileId: null,
       db: emptyDb(),
     });
   },
 
+  ensureToken: async () => {
+    const { token, expiresAt, user } = get();
+    if (token && expiresAt && expiresAt > Date.now() + 60_000) {
+      return token;
+    }
+    // 失効間際 → 無UIで再取得
+    if (!hasGoogleEnv() || !user) return token; // フォールバック
+    try {
+      const res = await getAccessToken(GOOGLE_CLIENT_ID, SCOPES, "");
+      const newExpiry = Date.now() + res.expiresIn * 1000;
+      saveSession({ token: res.token, expiresAt: newExpiry, user });
+      set({ token: res.token, expiresAt: newExpiry });
+      return res.token;
+    } catch {
+      return token; // 取れなければ既存トークンで試す
+    }
+  },
+
   /** Drive からDBを読み込む（フォルダ/ファイルが無ければ作る） */
   reload: async () => {
-    const token = get().token;
+    const token = await get().ensureToken();
     if (!token) return;
     set({ loading: true, error: null });
     try {
@@ -184,11 +274,6 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   addIssue: async (input) => {
-    const { token, folderId, db } = get();
-    if (!token || !folderId) {
-      set({ error: "サインインが必要です" });
-      return null;
-    }
     const now = new Date().toISOString();
     const issue: Issue = {
       id: uid(),
@@ -201,44 +286,24 @@ export const useStore = create<StoreState>((set, get) => ({
       created_at: now,
       updated_at: now,
     };
-    const next: DriveDB = {
+    const db = get().db;
+    const ok = await get().commit({
       ...db,
       issues: [issue, ...db.issues],
       updatedAt: now,
-    };
-    set({ saving: true, db: next, error: null });
-    try {
-      const id = await drive.writeDb(token, folderId, get().dbFileId, next);
-      set({ dbFileId: id });
-      return issue;
-    } catch (e) {
-      // 失敗したらロールバック
-      set({ db, error: e instanceof Error ? e.message : "保存に失敗しました" });
-      return null;
-    } finally {
-      set({ saving: false });
-    }
+    });
+    return ok ? issue : null;
   },
 
   deleteIssue: async (id) => {
-    const { token, folderId, db } = get();
-    if (!token || !folderId) return;
-    const next: DriveDB = {
+    const db = get().db;
+    await get().commit({
       ...db,
       issues: db.issues.filter((i) => i.id !== id),
       manuscripts: db.manuscripts.filter((m) => m.issue_id !== id),
       slots: db.slots.filter((s) => s.issue_id !== id),
       updatedAt: new Date().toISOString(),
-    };
-    set({ saving: true, db: next });
-    try {
-      const fid = await drive.writeDb(token, folderId, get().dbFileId, next);
-      set({ dbFileId: fid });
-    } catch (e) {
-      set({ db, error: e instanceof Error ? e.message : "削除に失敗しました" });
-    } finally {
-      set({ saving: false });
-    }
+    });
   },
 
   moveSlot: async (slotId, toPage, beforeSlotId) => {
@@ -290,11 +355,25 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   uploadImage: async (manuscriptId, file, role) => {
-    const { token, folderId, db } = get();
-    if (!token || !folderId) {
+    const token = await get().ensureToken();
+    if (!token) {
       set({ error: "サインインが必要です" });
       return null;
     }
+    let folderId = get().folderId;
+    if (!folderId) {
+      try {
+        folderId = await drive.ensureFolder(token);
+        set({ folderId });
+      } catch {
+        // 下で判定
+      }
+    }
+    if (!folderId) {
+      set({ error: "保存先フォルダの準備に失敗しました" });
+      return null;
+    }
+    const db = get().db;
     set({ saving: true, error: null });
     try {
       const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
@@ -327,7 +406,8 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   deleteImage: async (imageId) => {
-    const { token, db } = get();
+    const db = get().db;
+    const token = await get().ensureToken();
     const img = db.images.find((i) => i.id === imageId);
     if (token && img) {
       try {
@@ -344,9 +424,24 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   commit: async (next) => {
-    const { token, folderId, db } = get();
-    if (!token || !folderId) {
+    const prevDb = get().db;
+    const token = await get().ensureToken();
+    if (!token) {
       set({ error: "サインインが必要です" });
+      return false;
+    }
+    // フォルダ未準備なら用意する
+    let folderId = get().folderId;
+    if (!folderId) {
+      try {
+        folderId = await drive.ensureFolder(token);
+        set({ folderId });
+      } catch {
+        // 下で判定
+      }
+    }
+    if (!folderId) {
+      set({ error: "保存先フォルダの準備に失敗しました" });
       return false;
     }
     set({ saving: true, db: next, error: null });
@@ -355,7 +450,7 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ dbFileId: fid });
       return true;
     } catch (e) {
-      set({ db, error: e instanceof Error ? e.message : "保存に失敗しました" });
+      set({ db: prevDb, error: e instanceof Error ? e.message : "保存に失敗しました" });
       return false;
     } finally {
       set({ saving: false });

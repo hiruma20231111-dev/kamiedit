@@ -49,7 +49,9 @@ export default function MediaPage({
       </div>
 
       <div className="mb-6 flex items-center justify-between gap-4">
-        <h2 className="text-lg font-semibold">号数を選択</h2>
+        <h2 className="text-lg font-semibold">
+          {media.hasLayout ? "割付を選択" : "号を選択"}
+        </h2>
         {signedIn && (
           <NewIssueForm
             mediaId={media.id}
@@ -63,11 +65,17 @@ export default function MediaPage({
         <Card className={`p-10 text-center ${style.softBg}`}>
           <BookOpen className={`mx-auto h-10 w-10 ${style.text}`} />
           <p className="mt-3 font-medium">
-            {loading ? "読み込み中…" : "まだ号数がありません"}
+            {loading
+              ? "読み込み中…"
+              : media.hasLayout
+                ? "まだ割付がありません"
+                : "まだ号がありません"}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {signedIn
-              ? "「新規号を作成」から最初の号を追加してください。"
+              ? media.hasLayout
+                ? "「割付を作成」から、何月号かを入力して追加してください。"
+                : "「号を作成」から、何月号かを入力して追加してください。"
               : "編集・保存には右上から Google ログインしてください。"}
           </p>
         </Card>

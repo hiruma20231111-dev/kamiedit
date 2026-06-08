@@ -34,6 +34,12 @@ export interface GoogleUser {
   picture?: string;
 }
 
+export interface TokenResult {
+  token: string;
+  /** 有効秒数（通常3600） */
+  expiresIn: number;
+}
+
 /**
  * アクセストークンを取得する。
  * prompt: "" は無UIでの取得を試みる（セッションがあれば成功、無ければ失敗）。
@@ -43,14 +49,14 @@ export async function getAccessToken(
   clientId: string,
   scope: string,
   prompt: "" | "consent" | "select_account" = "",
-): Promise<string> {
+): Promise<TokenResult> {
   await loadGisScript();
   const google = window.google;
   if (!google?.accounts?.oauth2) {
     throw new Error("GISが利用できません");
   }
 
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<TokenResult>((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
       scope,
@@ -58,7 +64,10 @@ export async function getAccessToken(
       callback: (resp: any) => {
         if (resp?.error) return reject(new Error(resp.error));
         if (!resp?.access_token) return reject(new Error("no_token"));
-        resolve(resp.access_token as string);
+        resolve({
+          token: resp.access_token as string,
+          expiresIn: Number(resp.expires_in) || 3600,
+        });
       },
       error_callback: (err: any) =>
         reject(new Error(err?.type ?? "oauth_error")),

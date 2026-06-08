@@ -51,18 +51,20 @@ export function NewIssueForm({
     });
   }
 
+  const actionLabel = hasLayout ? "割付を作成" : "号を作成";
+
   if (!open) {
     return (
       <Button onClick={() => setOpen(true)}>
         <Plus className="h-4 w-4" />
-        新規号を作成
+        {actionLabel}
       </Button>
     );
   }
 
   return (
     <Card className="w-full max-w-md p-5">
-      <h3 className="mb-4 font-semibold">新規号の作成</h3>
+      <h3 className="mb-4 font-semibold">{actionLabel}</h3>
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <div>

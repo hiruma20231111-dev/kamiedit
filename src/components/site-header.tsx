@@ -5,6 +5,7 @@ import { useStore } from "@/lib/store";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LoginButton, UserMenu } from "@/components/auth-buttons";
 import { Badge } from "@/components/ui/badge";
+import { Settings } from "lucide-react";
 
 export function SiteHeader() {
   const configured = useStore((s) => s.configured);
@@ -36,6 +37,14 @@ export function SiteHeader() {
               {saving ? "保存中…" : loading ? "読込中…" : "Drive同期"}
             </Badge>
           )}
+          <Link
+            href="/profile"
+            aria-label="プロフィール / 設定"
+            title="プロフィール / APIキー設定"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <Settings className="h-5 w-5" />
+          </Link>
           <ThemeToggle />
           {signedIn ? <UserMenu /> : <LoginButton />}
         </div>

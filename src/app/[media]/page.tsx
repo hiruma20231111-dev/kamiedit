@@ -22,9 +22,10 @@ export default function MediaPage({
   const style = THEME_STYLES[media.theme];
   const signedIn = useStore((s) => s.signedIn);
   const loading = useStore((s) => s.loading);
-  const issues = useStore((s) =>
-    s.db.issues.filter((i) => i.media_id === media.id),
-  );
+  // セレクタ内で filter して新配列を返すと無限ループになるため、
+  // 安定参照(db.issues)を取得してから描画側で絞り込む。
+  const allIssues = useStore((s) => s.db.issues);
+  const issues = allIssues.filter((i) => i.media_id === media.id);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">

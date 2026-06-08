@@ -51,6 +51,8 @@ export interface MediaConfig {
   name: string;
   theme: ThemeColor;
   hasLayout: boolean;
+  /** TOPカードの表紙イメージ画像パス（public配下）。無ければグラデーション表示 */
+  cover?: string;
   pageOptions?: number[];
   sizes: SizeFormat[];
 }
@@ -98,6 +100,7 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     name: "まみたん",
     theme: "pink",
     hasLayout: true,
+    cover: "/covers/mamitan.jpg",
     pageOptions: [16, 24, 32, 40],
     sizes: [
       {
@@ -196,6 +199,7 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     name: "ぱど",
     theme: "blue",
     hasLayout: false,
+    cover: "/covers/pado.jpg",
     sizes: [
       { size: "1/8", label: "1/8", fields: padoFields, imageCount: 1 },
       { size: "1/4", label: "1/4", fields: padoFields, imageCount: 2 },
@@ -211,6 +215,7 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     name: "新DOMO!ぱど",
     theme: "orange",
     hasLayout: false,
+    cover: "/covers/shin_domo.jpg",
     sizes: [
       { size: "1/16P", label: "1/16P", fields: recruitFields, imageCount: 1 },
       { size: "1/8P", label: "1/8P", fields: recruitFields, imageCount: 1 },

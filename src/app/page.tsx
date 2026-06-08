@@ -1,87 +1,61 @@
 "use client";
 
-import Link from "next/link";
 import { MEDIA_LIST } from "@/lib/config/media";
-import { THEME_STYLES } from "@/lib/theme";
 import { useStore } from "@/lib/store";
-import { Card } from "@/components/ui/card";
-import { ArrowRight, LayoutGrid, List } from "lucide-react";
+import { MediaCard } from "@/components/media-card";
+import { Sparkles, TriangleAlert, Eye } from "lucide-react";
 
 export default function Home() {
   const configured = useStore((s) => s.configured);
   const signedIn = useStore((s) => s.signedIn);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <section className="mb-10 text-center">
-        <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
-          媒体を選択してください
-        </h1>
-        <p className="mt-3 text-muted-foreground">
-          原稿の作成・割付管理・AIアシストを、媒体ごとのフォーマットで。
-        </p>
-      </section>
+    <div className="relative">
+      {/* 背景の装飾 */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-linear-to-b from-primary/5 to-transparent" />
 
-      {!configured && (
-        <div className="mb-8 rounded-lg border border-amber-400/60 bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          <p className="font-semibold">⚠️ Google が未接続です（プレビューモード）</p>
-          <p className="mt-1">
-            データは各自の Google ドライブに保存します。利用するには
-            <code className="mx-1 rounded bg-amber-100 px-1 dark:bg-amber-900/40">
-              NEXT_PUBLIC_GOOGLE_CLIENT_ID
-            </code>
-            を設定してください（README参照）。
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:py-16">
+        <section className="mx-auto mb-12 max-w-2xl text-center">
+          <span className="inline-flex items-center gap-1.5 rounded-full border bg-background/60 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
+            <Sparkles className="h-3.5 w-3.5" />
+            編集支援・AIアシスト
+          </span>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl">
+            媒体を選択
+          </h1>
+          <p className="mt-4 text-base text-muted-foreground sm:text-lg">
+            原稿の作成・割付管理・AIアシストを、媒体ごとのフォーマットで。
           </p>
-        </div>
-      )}
+        </section>
 
-      {configured && !signedIn && (
-        <div className="mb-8 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-          閲覧モードです。編集・保存するには右上から Google ログインしてください
-          （データはご自身の Google ドライブに保存されます）。
-        </div>
-      )}
+        {!configured && (
+          <div className="mx-auto mb-8 flex max-w-2xl items-start gap-3 rounded-xl border border-amber-400/50 bg-amber-50/80 p-4 text-sm text-amber-800 backdrop-blur dark:bg-amber-950/30 dark:text-amber-200">
+            <TriangleAlert className="mt-0.5 h-4.5 w-4.5 shrink-0" />
+            <div>
+              <p className="font-semibold">Google が未接続です（プレビューモード）</p>
+              <p className="mt-0.5 text-amber-700 dark:text-amber-300/90">
+                データは各自の Google ドライブに保存します。
+                <code className="mx-1 rounded bg-amber-100 px-1 dark:bg-amber-900/40">
+                  NEXT_PUBLIC_GOOGLE_CLIENT_ID
+                </code>
+                を設定してください。
+              </p>
+            </div>
+          </div>
+        )}
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {MEDIA_LIST.map((media) => {
-          const style = THEME_STYLES[media.theme];
-          return (
-            <Link key={media.id} href={`/${media.id}`} className="group">
-              <Card
-                className={`overflow-hidden border-2 p-0 transition-all hover:-translate-y-1 hover:shadow-lg ring-2 ring-transparent ${style.border} ${style.ring}`}
-              >
-                <div
-                  className={`h-24 bg-linear-to-br ${style.gradient}`}
-                  aria-hidden
-                />
-                <div className="p-5">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-bold">{media.name}</h2>
-                    <ArrowRight
-                      className={`h-5 w-5 transition-transform group-hover:translate-x-1 ${style.text}`}
-                    />
-                  </div>
-                  <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
-                    {media.hasLayout ? (
-                      <>
-                        <LayoutGrid className="h-4 w-4" />
-                        割付表（グリッド）対応
-                      </>
-                    ) : (
-                      <>
-                        <List className="h-4 w-4" />
-                        原稿一覧ダッシュボード
-                      </>
-                    )}
-                  </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    テーマ: {style.label} / サイズ {media.sizes.length}種
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          );
-        })}
+        {configured && !signedIn && (
+          <div className="mx-auto mb-8 flex max-w-2xl items-center gap-2.5 rounded-xl border bg-muted/40 p-4 text-sm text-muted-foreground">
+            <Eye className="h-4.5 w-4.5 shrink-0" />
+            閲覧モードです。編集・保存するには右上から Google ログインしてください。
+          </div>
+        )}
+
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {MEDIA_LIST.map((media) => (
+            <MediaCard key={media.id} media={media} />
+          ))}
+        </div>
       </div>
     </div>
   );

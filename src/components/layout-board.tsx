@@ -187,6 +187,21 @@ export function LayoutBoard({
           {placed.map(({ slot, col, row, colSpan, rowSpan }) => {
             const hasManuscript = !!slot.manuscript_id;
             const supplied = slot.source_type === "supplied";
+            // 緑: 自社稿/表紙/巻頭記事の枠。黄: 新規/過去修正/過去流用で原稿が付いた枠
+            const isGreen =
+              slot.kind === "inhouse" ||
+              slot.kind === "lead" ||
+              slot.kind === "cover";
+            const isYellow =
+              !isGreen &&
+              (slot.source_type === "new" ||
+                slot.source_type === "reuse" ||
+                slot.source_type === "edit");
+            const toneClass = isGreen
+              ? "border-emerald-400 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/40"
+              : isYellow
+                ? "border-amber-400 bg-amber-50 dark:border-amber-600 dark:bg-amber-950/40"
+                : `${style.border} ${supplied ? style.softBg : "bg-background"}`;
             const kindLabel =
               slot.kind && slot.kind !== "ad" ? KIND_LABELS[slot.kind] : null;
             const dragging = dragId === slot.id;
@@ -216,9 +231,9 @@ export function LayoutBoard({
                   zIndex: dragging ? 30 : 10,
                   touchAction: signedIn ? "none" : undefined,
                 }}
-                className={`flex flex-col justify-between overflow-hidden rounded-md border-2 p-1.5 text-left text-xs transition-all ${style.border} ${
-                  hasManuscript || supplied ? style.softBg : "bg-background"
-                } ${signedIn ? "cursor-grab hover:shadow-md active:cursor-grabbing" : "cursor-default"} ${
+                className={`flex flex-col justify-between overflow-hidden rounded-md border-2 p-1.5 text-left text-xs transition-all ${toneClass} ${
+                  signedIn ? "cursor-grab hover:shadow-md active:cursor-grabbing" : "cursor-default"
+                } ${
                   dragging ? "opacity-40" : ""
                 } ${isDropTarget ? "ring-2 ring-primary ring-offset-1" : ""}`}
               >

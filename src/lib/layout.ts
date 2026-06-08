@@ -11,7 +11,9 @@ export const ROWS = 4;
 export const SIZE_UNITS: Record<string, number> = {
   "1/8": 1,
   "1/4": 2,
+  "1/4Y": 2,
   "1/2": 4,
+  "1/2T": 4,
   "1P": 8,
   "2P": 8,
 };
@@ -26,9 +28,13 @@ export function sizeSpan(size: string): { col: number; row: number } {
     case "1/8":
       return { col: 1, row: 1 };
     case "1/4":
-      return { col: 1, row: 2 };
+      return { col: 1, row: 2 }; // 縦長（1列×2行）
+    case "1/4Y":
+      return { col: 2, row: 1 }; // 横長（2列×1行）
     case "1/2":
-      return { col: 2, row: 2 };
+      return { col: 2, row: 2 }; // 2×2ブロック
+    case "1/2T":
+      return { col: 1, row: 4 }; // 縦長（1列×4行）
     case "1P":
       return { col: 2, row: 4 };
     case "2P":

@@ -5,12 +5,12 @@ import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import {
   resolveFormat,
-  KIND_OPTIONS,
-  KIND_LABELS,
+  CATEGORY_OPTIONS,
+  CATEGORY_LABELS,
   type MediaConfig,
   type FieldDef,
 } from "@/lib/config/media";
-import type { ManuscriptKind } from "@/lib/types";
+import type { ManuscriptCategory } from "@/lib/types";
 import { THEME_STYLES } from "@/lib/theme";
 import type { Manuscript } from "@/lib/types";
 import { DriveImage } from "@/components/drive-image";
@@ -86,7 +86,9 @@ export function ManuscriptEditor({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [variant, setVariant] = useState<string | null>(manuscript.variant);
-  const [kind, setKind] = useState<ManuscriptKind>(manuscript.kind ?? "ad");
+  const [category, setCategory] = useState<ManuscriptCategory | null>(
+    manuscript.category ?? null,
+  );
   const [genre, setGenre] = useState(manuscript.genre ?? "");
   const [tone, setTone] = useState(manuscript.tone ?? "");
   const [target, setTarget] = useState(manuscript.target ?? "");
@@ -119,7 +121,7 @@ export function ManuscriptEditor({
     startTransition(async () => {
       await updateManuscript(manuscript.id, {
         variant,
-        kind,
+        category,
         genre: genre || null,
         tone: tone || null,
         target: target || null,
@@ -182,20 +184,20 @@ export function ManuscriptEditor({
         </div>
 
         <div className="mt-4">
-          <Label>原稿種類</Label>
+          <Label>企画区分</Label>
           <div className="mt-1 flex flex-wrap gap-2">
-            {KIND_OPTIONS.map((k) => (
+            {CATEGORY_OPTIONS.map((c) => (
               <button
-                key={k}
+                key={c}
                 type="button"
-                onClick={() => setKind(k)}
+                onClick={() => setCategory((cur) => (cur === c ? null : c))}
                 className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
-                  kind === k
+                  category === c
                     ? "border-primary bg-primary text-primary-foreground"
                     : "hover:bg-muted"
                 }`}
               >
-                {KIND_LABELS[k]}
+                {CATEGORY_LABELS[c]}
               </button>
             ))}
           </div>

@@ -6,8 +6,15 @@
 export type Role = "admin" | "editor";
 export type ManuscriptStatus = "draft" | "done";
 export type SourceType = "new" | "reuse" | "edit" | "supplied";
-/** 原稿種類: 広告 / 自社稿 / 巻頭記事 / 表紙 */
+/** 原稿種類: 広告 / 自社稿 / 巻頭記事 / 表紙（枠の構造的な区分。枠作成時に指定） */
 export type ManuscriptKind = "ad" | "inhouse" | "lead" | "cover";
+/** 企画区分: 原稿編集時に選ぶ企画カテゴリ */
+export type ManuscriptCategory =
+  | "format"
+  | "free"
+  | "school"
+  | "money_seminar"
+  | "other";
 
 export interface Media {
   id: string;
@@ -46,6 +53,8 @@ export interface Manuscript {
   size: string;
   variant: string | null;
   kind?: ManuscriptKind;
+  /** 企画区分（フォーマット/フリー/スクール/マネセミ/その他企画） */
+  category?: ManuscriptCategory | null;
   company_name: string | null;
   display_name: string | null;
   genre: string | null;

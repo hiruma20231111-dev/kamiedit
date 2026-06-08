@@ -6,18 +6,34 @@
  *   文字数(maxLength)は暫定値（要確定）。media-data PDF 入手後に更新する。
  */
 
-import type { ManuscriptKind } from "@/lib/types";
+import type { ManuscriptKind, ManuscriptCategory } from "@/lib/types";
 
 export type MediaId = "mamitan" | "pado" | "shin_domo";
 export type ThemeColor = "pink" | "blue" | "orange";
 
-/** 原稿種類の選択肢・表示名 */
+/** 原稿種類の選択肢・表示名（枠作成時に使う構造的な区分） */
 export const KIND_OPTIONS: ManuscriptKind[] = ["ad", "inhouse", "lead", "cover"];
 export const KIND_LABELS: Record<ManuscriptKind, string> = {
   ad: "広告",
   inhouse: "自社稿",
   lead: "巻頭記事",
   cover: "表紙",
+};
+
+/** 企画区分の選択肢・表示名（原稿編集時に使う企画カテゴリ） */
+export const CATEGORY_OPTIONS: ManuscriptCategory[] = [
+  "format",
+  "free",
+  "school",
+  "money_seminar",
+  "other",
+];
+export const CATEGORY_LABELS: Record<ManuscriptCategory, string> = {
+  format: "フォーマット",
+  free: "フリー",
+  school: "スクール",
+  money_seminar: "マネセミ",
+  other: "その他企画",
 };
 
 export interface FieldDef {
@@ -93,6 +109,74 @@ const recruitFields: FieldDef[] = [
   { key: "company_info", label: "企業情報", type: "textarea", maxLength: 100 },
 ];
 
+/** まみたん 1/4 の原稿バリエーション（縦長1/4・横長1/4Y で共用） */
+const quarterVariants: SizeVariant[] = [
+  {
+    id: "1store",
+    label: "1店舗（写真3点）",
+    imageCount: 3,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行＝40文字まで" },
+      { key: "body", label: "本文", type: "textarea", maxLength: 126, hint: "126文字まで" },
+      { key: "appeal", label: "アピールポイント", type: "text", maxLength: 40 },
+      ...storeFields(),
+    ],
+  },
+  {
+    id: "2store",
+    label: "2店舗（写真不可）",
+    imageCount: 0,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行" },
+      { key: "body", label: "本文", type: "textarea", maxLength: 220, hint: "17文字×13行＝220文字まで" },
+      ...storeFields("_1", "（1店舗目）"),
+      ...storeFields("_2", "（2店舗目）"),
+    ],
+  },
+];
+
+/** まみたん 1/2 の原稿バリエーション（2×2の1/2・縦長1/2T で共用） */
+const halfVariants: SizeVariant[] = [
+  {
+    id: "1store",
+    label: "1店舗（写真フリー）",
+    imageCount: 8,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行＝40文字まで" },
+      { key: "body", label: "本文", type: "textarea", maxLength: 220 },
+      { key: "caption", label: "メイン写真キャプション", type: "textarea", maxLength: 90, hint: "45文字×2行＝90文字程度" },
+      ...storeFields(),
+    ],
+  },
+  {
+    id: "2store",
+    label: "2店舗（写真2点まで）",
+    imageCount: 2,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true },
+      { key: "body", label: "本文", type: "textarea", maxLength: 220 },
+      ...storeFields("_1", "①"),
+      ...storeFields("_2", "②"),
+    ],
+  },
+  {
+    id: "3store",
+    label: "3店舗（写真1点まで）",
+    imageCount: 1,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true },
+      ...storeFields("_1", "①"),
+      ...storeFields("_2", "②"),
+      ...storeFields("_3", "③"),
+    ],
+  },
+];
+
 export const MEDIA: Record<MediaId, MediaConfig> = {
   // ───────── まみたん（原稿用紙Excelより正確） ─────────
   mamitan: {
@@ -115,78 +199,10 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
           ...storeFields(),
         ],
       },
-      {
-        size: "1/4",
-        label: "1/4",
-        variants: [
-          {
-            id: "1store",
-            label: "1店舗（写真3点）",
-            imageCount: 3,
-            fields: [
-              genre,
-              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行＝40文字まで" },
-              { key: "body", label: "本文", type: "textarea", maxLength: 126, hint: "126文字まで" },
-              { key: "appeal", label: "アピールポイント", type: "text", maxLength: 40 },
-              ...storeFields(),
-            ],
-          },
-          {
-            id: "2store",
-            label: "2店舗（写真不可）",
-            imageCount: 0,
-            fields: [
-              genre,
-              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行" },
-              { key: "body", label: "本文", type: "textarea", maxLength: 220, hint: "17文字×13行＝220文字まで" },
-              ...storeFields("_1", "（1店舗目）"),
-              ...storeFields("_2", "（2店舗目）"),
-            ],
-          },
-        ],
-      },
-      {
-        size: "1/2",
-        label: "1/2",
-        variants: [
-          {
-            id: "1store",
-            label: "1店舗（写真フリー）",
-            imageCount: 8,
-            fields: [
-              genre,
-              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行＝40文字まで" },
-              { key: "body", label: "本文", type: "textarea", maxLength: 220 },
-              { key: "caption", label: "メイン写真キャプション", type: "textarea", maxLength: 90, hint: "45文字×2行＝90文字程度" },
-              ...storeFields(),
-            ],
-          },
-          {
-            id: "2store",
-            label: "2店舗（写真2点まで）",
-            imageCount: 2,
-            fields: [
-              genre,
-              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true },
-              { key: "body", label: "本文", type: "textarea", maxLength: 220 },
-              ...storeFields("_1", "①"),
-              ...storeFields("_2", "②"),
-            ],
-          },
-          {
-            id: "3store",
-            label: "3店舗（写真1点まで）",
-            imageCount: 1,
-            fields: [
-              genre,
-              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true },
-              ...storeFields("_1", "①"),
-              ...storeFields("_2", "②"),
-              ...storeFields("_3", "③"),
-            ],
-          },
-        ],
-      },
+      { size: "1/4", label: "1/4（縦）", variants: quarterVariants },
+      { size: "1/4Y", label: "1/4Y（横2枠）", variants: quarterVariants },
+      { size: "1/2", label: "1/2（2×2）", variants: halfVariants },
+      { size: "1/2T", label: "1/2T（縦4枠）", variants: halfVariants },
       // 割付上のフルページ枠（原稿項目は暫定）
       { size: "1P", label: "1ページ", imageCount: 8, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 }, { key: "body", label: "本文", type: "textarea", maxLength: 300 }, ...storeFields()] },
       { size: "2P", label: "2ページ(見開き)", imageCount: 12, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 60 }, { key: "body", label: "本文", type: "textarea", maxLength: 600 }, ...storeFields()] },

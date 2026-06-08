@@ -14,7 +14,12 @@ import {
 } from "@/lib/google/gis";
 import * as drive from "@/lib/google/drive";
 import { emptyDb, type DriveDB } from "@/lib/db";
-import type { Issue, Manuscript, LayoutSlot } from "@/lib/types";
+import type {
+  Issue,
+  Manuscript,
+  LayoutSlot,
+  ManuscriptImage,
+} from "@/lib/types";
 import type { MediaId } from "@/lib/config/media";
 
 interface StoreState {
@@ -66,6 +71,14 @@ interface StoreState {
   }) => Promise<LayoutSlot | null>;
   updateSlot: (id: string, patch: Partial<LayoutSlot>) => Promise<void>;
   deleteSlot: (id: string) => Promise<void>;
+
+  // 画像
+  uploadImage: (
+    manuscriptId: string,
+    file: File,
+    role?: string | null,
+  ) => Promise<ManuscriptImage | null>;
+  deleteImage: (imageId: string) => Promise<void>;
 
   /** db を更新して Drive へ保存（失敗時ロールバック） */
   commit: (next: DriveDB) => Promise<boolean>;
@@ -217,6 +230,60 @@ export const useStore = create<StoreState>((set, get) => ({
     } finally {
       set({ saving: false });
     }
+  },
+
+  uploadImage: async (manuscriptId, file, role) => {
+    const { token, folderId, db } = get();
+    if (!token || !folderId) {
+      set({ error: "サインインが必要です" });
+      return null;
+    }
+    set({ saving: true, error: null });
+    try {
+      const ext = file.name.includes(".") ? file.name.split(".").pop() : "jpg";
+      const driveName = `img_${manuscriptId}_${Date.now()}.${ext}`;
+      const fileId = await drive.uploadFile(token, folderId, driveName, file);
+      const existing = db.images.filter((i) => i.manuscript_id === manuscriptId);
+      const img: ManuscriptImage = {
+        id: uid(),
+        manuscript_id: manuscriptId,
+        storage_path: fileId,
+        original_name: file.name,
+        role: role ?? null,
+        sort_order: existing.length,
+        created_at: new Date().toISOString(),
+      };
+      const next: DriveDB = {
+        ...db,
+        images: [...db.images, img],
+        updatedAt: new Date().toISOString(),
+      };
+      const fid = await drive.writeDb(token, folderId, get().dbFileId, next);
+      set({ db: next, dbFileId: fid });
+      return img;
+    } catch (e) {
+      set({ error: e instanceof Error ? e.message : "画像の保存に失敗しました" });
+      return null;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+  deleteImage: async (imageId) => {
+    const { token, db } = get();
+    const img = db.images.find((i) => i.id === imageId);
+    if (token && img) {
+      try {
+        await drive.deleteFile(token, img.storage_path);
+      } catch {
+        // Drive側の削除失敗は致命的でないため握りつぶす
+      }
+    }
+    await get().commit({
+      ...db,
+      images: db.images.filter((i) => i.id !== imageId),
+      updatedAt: new Date().toISOString(),
+    });
   },
 
   commit: async (next) => {

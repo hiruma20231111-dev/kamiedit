@@ -1,41 +1,37 @@
 /**
  * 媒体・サイズ・原稿フォーマットの定義。
  *
- * ⚠️ 文字数上限（maxLength）は暫定値です。
- *    参考資料（Y:\...\紙面資料＆フォーマット の媒体資料PDF / まみたんFO原稿用紙.xlsx）を基に
- *    「動的フォーム」実装フェーズで正式な数値に確定させます。
+ * まみたん: 「まみたんFO原稿用紙.xlsx」から正確な項目・文字数を反映済み。
+ * ぱど / 新DOMO!ぱど: 原稿用紙テンプレが未入手のため項目は仕様書ベース、
+ *   文字数(maxLength)は暫定値（要確定）。media-data PDF 入手後に更新する。
  */
 
 export type MediaId = "mamitan" | "pado" | "shin_domo";
-
-/** UIテーマカラー（globals.css / Tailwind 側のクラスにマッピングする想定） */
 export type ThemeColor = "pink" | "blue" | "orange";
 
 export interface FieldDef {
-  /** content JSONB に保存するキー */
   key: string;
-  /** 入力ラベル */
   label: string;
-  /** input(1行) か textarea(複数行) か */
   type: "text" | "textarea";
-  /** 文字数上限（暫定／要確定）。0 または未設定なら無制限 */
+  /** 文字数上限。未設定なら無制限 */
   maxLength?: number;
-  /** 必須かどうか */
   required?: boolean;
-  /** 画像枚数（写真フィールドの場合のみ） */
-  imageCount?: number;
+  /** 入力補助の注記 */
+  hint?: string;
+}
+
+export interface SizeVariant {
+  id: string;
+  label: string;
+  fields: FieldDef[];
+  imageCount: number;
 }
 
 export interface SizeFormat {
-  /** サイズ識別子（DB の size カラムに保存） */
   size: string;
-  /** 表示ラベル */
   label: string;
-  /** バリアント（まみたん 1/4 の 1店舗/2店舗 など）。なければ undefined */
-  variants?: { id: string; label: string; fields: FieldDef[]; imageCount: number }[];
-  /** バリアントが無い場合の入力フィールド */
+  variants?: SizeVariant[];
   fields?: FieldDef[];
-  /** 画像点数（バリアントが無い場合） */
   imageCount?: number;
 }
 
@@ -43,26 +39,37 @@ export interface MediaConfig {
   id: MediaId;
   name: string;
   theme: ThemeColor;
-  /** 割付表（グリッドUI）を持つか。まみたん=true、ぱど/新DOMO=false */
   hasLayout: boolean;
-  /** まみたんの割付で選べるページ構成 */
   pageOptions?: number[];
   sizes: SizeFormat[];
 }
 
-/** 共通フィールド（多くのサイズで使う基本項目） */
-const storeInfoFields: FieldDef[] = [
-  { key: "store_name", label: "店舗名・掲載名", type: "text", maxLength: 40, required: true },
-  { key: "catch_copy", label: "キャッチコピー", type: "text", maxLength: 30 },
+/** 店舗情報（1店舗ぶん）。suffix で複数店舗を区別 */
+function storeFields(suffix = "", lbl = ""): FieldDef[] {
+  return [
+    { key: `store_name${suffix}`, label: `店名${lbl}`, type: "text", maxLength: 30 },
+    { key: `tel${suffix}`, label: `電話番号${lbl}`, type: "text", maxLength: 20 },
+    { key: `address${suffix}`, label: `住所${lbl}`, type: "text", maxLength: 60 },
+    { key: `hours${suffix}`, label: `営業時間${lbl}`, type: "text", maxLength: 40 },
+    { key: `holiday${suffix}`, label: `定休日${lbl}`, type: "text", maxLength: 30 },
+    { key: `other${suffix}`, label: `その他${lbl}`, type: "text", maxLength: 40 },
+  ];
+}
+
+const genre: FieldDef = { key: "genre", label: "業種", type: "text", maxLength: 8, hint: "8文字程度" };
+
+/** ぱど用 汎用フィールド（暫定） */
+const padoFields: FieldDef[] = [
+  genre,
+  { key: "catch", label: "キャッチコピー", type: "textarea", maxLength: 30, required: true },
   { key: "body", label: "本文・PR文", type: "textarea", maxLength: 120 },
-  { key: "tel", label: "電話番号", type: "text", maxLength: 20 },
-  { key: "address", label: "住所", type: "text", maxLength: 60 },
-  { key: "hours", label: "営業時間・定休日", type: "text", maxLength: 60 },
+  ...storeFields(),
+  { key: "coupon", label: "クーポン／インフォメーション", type: "textarea", maxLength: 60 },
 ];
 
-/** 新DOMO!ぱど（求人特化）の項目 */
+/** 新DOMO!ぱど（求人特化）の項目（文字数は暫定） */
 const recruitFields: FieldDef[] = [
-  { key: "catch_copy", label: "キャッチコピー", type: "text", maxLength: 30, required: true },
+  { key: "catch", label: "キャッチコピー", type: "textarea", maxLength: 30, required: true },
   { key: "job_content", label: "職種・仕事内容", type: "textarea", maxLength: 120, required: true },
   { key: "salary", label: "給与", type: "text", maxLength: 60 },
   { key: "work_hours", label: "勤務時間・休日", type: "textarea", maxLength: 80 },
@@ -74,6 +81,7 @@ const recruitFields: FieldDef[] = [
 ];
 
 export const MEDIA: Record<MediaId, MediaConfig> = {
+  // ───────── まみたん（原稿用紙Excelより正確） ─────────
   mamitan: {
     id: "mamitan",
     name: "まみたん",
@@ -81,49 +89,112 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     hasLayout: true,
     pageOptions: [16, 24, 32, 40],
     sizes: [
-      { size: "1/8", label: "1/8", fields: storeInfoFields, imageCount: 1 },
+      {
+        size: "1/8",
+        label: "1/8",
+        imageCount: 1,
+        fields: [
+          genre,
+          { key: "catch", label: "キャッチ", type: "textarea", maxLength: 20, required: true, hint: "10文字×2行＝20文字まで" },
+          { key: "body", label: "本文", type: "textarea", maxLength: 120, hint: "120文字以内" },
+          { key: "coupon", label: "クーポン／インフォメーション", type: "textarea", maxLength: 60 },
+          ...storeFields(),
+        ],
+      },
       {
         size: "1/4",
         label: "1/4",
         variants: [
           {
             id: "1store",
-            label: "1店舗用（写真3点＋店舗情報1件）",
-            fields: storeInfoFields,
+            label: "1店舗（写真3点）",
             imageCount: 3,
+            fields: [
+              genre,
+              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行＝40文字まで" },
+              { key: "body", label: "本文", type: "textarea", maxLength: 126, hint: "126文字まで" },
+              { key: "appeal", label: "アピールポイント", type: "text", maxLength: 40 },
+              ...storeFields(),
+            ],
           },
           {
             id: "2store",
-            label: "2店舗用（写真なし＋店舗情報2件）",
-            // 2店舗ぶんの情報を入力（_2 サフィックスで2件目を保持）
-            fields: [
-              ...storeInfoFields,
-              ...storeInfoFields.map((f) => ({ ...f, key: `${f.key}_2`, label: `${f.label}（2店舗目）` })),
-            ],
+            label: "2店舗（写真不可）",
             imageCount: 0,
+            fields: [
+              genre,
+              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行" },
+              { key: "body", label: "本文", type: "textarea", maxLength: 220, hint: "17文字×13行＝220文字まで" },
+              ...storeFields("_1", "（1店舗目）"),
+              ...storeFields("_2", "（2店舗目）"),
+            ],
           },
         ],
       },
-      { size: "1/2", label: "1/2", fields: storeInfoFields, imageCount: 4 },
-      { size: "1P", label: "1ページ", fields: storeInfoFields, imageCount: 6 },
-      { size: "2P", label: "2ページ", fields: storeInfoFields, imageCount: 10 },
+      {
+        size: "1/2",
+        label: "1/2",
+        variants: [
+          {
+            id: "1store",
+            label: "1店舗（写真フリー）",
+            imageCount: 8,
+            fields: [
+              genre,
+              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true, hint: "10文字×4行＝40文字まで" },
+              { key: "body", label: "本文", type: "textarea", maxLength: 220 },
+              { key: "caption", label: "メイン写真キャプション", type: "textarea", maxLength: 90, hint: "45文字×2行＝90文字程度" },
+              ...storeFields(),
+            ],
+          },
+          {
+            id: "2store",
+            label: "2店舗（写真2点まで）",
+            imageCount: 2,
+            fields: [
+              genre,
+              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true },
+              { key: "body", label: "本文", type: "textarea", maxLength: 220 },
+              ...storeFields("_1", "①"),
+              ...storeFields("_2", "②"),
+            ],
+          },
+          {
+            id: "3store",
+            label: "3店舗（写真1点まで）",
+            imageCount: 1,
+            fields: [
+              genre,
+              { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40, required: true },
+              ...storeFields("_1", "①"),
+              ...storeFields("_2", "②"),
+              ...storeFields("_3", "③"),
+            ],
+          },
+        ],
+      },
+      // 割付上のフルページ枠（原稿項目は暫定）
+      { size: "1P", label: "1ページ", imageCount: 8, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 }, { key: "body", label: "本文", type: "textarea", maxLength: 300 }, ...storeFields()] },
+      { size: "2P", label: "2ページ(見開き)", imageCount: 12, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 60 }, { key: "body", label: "本文", type: "textarea", maxLength: 600 }, ...storeFields()] },
     ],
   },
 
+  // ───────── ぱど（暫定） ─────────
   pado: {
     id: "pado",
     name: "ぱど",
     theme: "blue",
     hasLayout: false,
     sizes: [
-      { size: "1/8", label: "1/8", fields: storeInfoFields, imageCount: 1 },
-      { size: "1/4", label: "1/4", fields: storeInfoFields, imageCount: 2 },
-      { size: "1/2", label: "1/2", fields: storeInfoFields, imageCount: 4 },
-      { size: "1P", label: "1ページ", fields: storeInfoFields, imageCount: 6 },
-      { size: "2P", label: "2ページ", fields: storeInfoFields, imageCount: 10 },
+      { size: "1/8", label: "1/8", fields: padoFields, imageCount: 1 },
+      { size: "1/4", label: "1/4", fields: padoFields, imageCount: 2 },
+      { size: "1/2", label: "1/2", fields: padoFields, imageCount: 4 },
+      { size: "1P", label: "1ページ", fields: padoFields, imageCount: 6 },
+      { size: "2P", label: "2ページ", fields: padoFields, imageCount: 10 },
     ],
   },
 
+  // ───────── 新DOMO!ぱど（求人特化・暫定） ─────────
   shin_domo: {
     id: "shin_domo",
     name: "新DOMO!ぱど",
@@ -141,6 +212,22 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
 };
 
 export const MEDIA_LIST: MediaConfig[] = Object.values(MEDIA);
+
+/** サイズ定義を取得（variant 指定時はそのフィールド/画像数を解決） */
+export function resolveFormat(
+  media: MediaConfig,
+  size: string,
+  variantId?: string | null,
+): { fields: FieldDef[]; imageCount: number; variants?: SizeVariant[] } | null {
+  const sf = media.sizes.find((s) => s.size === size);
+  if (!sf) return null;
+  if (sf.variants && sf.variants.length > 0) {
+    const v =
+      sf.variants.find((x) => x.id === variantId) ?? sf.variants[0];
+    return { fields: v.fields, imageCount: v.imageCount, variants: sf.variants };
+  }
+  return { fields: sf.fields ?? [], imageCount: sf.imageCount ?? 0 };
+}
 
 /** AIアシスト用のパラメータ選択肢 */
 export const GENRE_OPTIONS = ["医療", "飲食店", "スクール", "美容", "小売", "サービス", "不動産", "その他"];

@@ -116,6 +116,23 @@ export async function writeDb(
   return created.id as string;
 }
 
+/** ファイルのバイナリをダウンロードして Blob で返す（drive.file: アプリ作成ファイルのみ） */
+export async function downloadFile(token: string, fileId: string): Promise<Blob> {
+  const res = await fetch(`${API}/files/${fileId}?alt=media`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) throw new Error(`ファイル取得失敗: ${res.status}`);
+  return res.blob();
+}
+
+/** Drive 上のファイルを削除 */
+export async function deleteFile(token: string, fileId: string): Promise<void> {
+  await fetch(`${API}/files/${fileId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
 /** 画像など任意ファイルをアップロードして fileId を返す（Step4 で使用） */
 export async function uploadFile(
   token: string,

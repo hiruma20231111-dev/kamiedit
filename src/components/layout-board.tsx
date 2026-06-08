@@ -23,6 +23,35 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/** ドラッグ開始とみなす移動量（px）。これ未満はクリック扱い */
+const DRAG_THRESHOLD = 5;
+
+/** ポインタ座標直下のドロップ先セル（page,col,row）を求める。dragId の枠自身は無視 */
+function cellFromPoint(
+  x: number,
+  y: number,
+  skipId: string | null,
+): { page: number; col: number; row: number } | null {
+  const els = document.elementsFromPoint(x, y);
+  for (const el of els) {
+    if (
+      skipId &&
+      (el as HTMLElement).closest?.(`[data-slot-id="${skipId}"]`)
+    ) {
+      continue; // ドラッグ中の枠自身は飛ばす
+    }
+    const host = (el as HTMLElement).closest?.("[data-cell]") as
+      | HTMLElement
+      | null;
+    const dc = host?.dataset.cell;
+    if (dc) {
+      const [page, col, row] = dc.split(":").map(Number);
+      return { page, col, row };
+    }
+  }
+  return null;
+}
+
 export function LayoutBoard({
   media,
   issueId,
@@ -39,7 +68,22 @@ export function LayoutBoard({
   const [selected, setSelected] = useState<LayoutSlot | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCell, setOverCell] = useState<string | null>(null);
+  const [ghost, setGhost] = useState<{
+    x: number;
+    y: number;
+    label: string;
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  // ポインタドラッグの内部状態（再レンダーに依存しない）
+  const dragRef = useRef<{
+    id: string;
+    started: boolean;
+    sx: number;
+    sy: number;
+  } | null>(null);
+  // 直前がドラッグだった場合に onClick（ダイアログ表示）を抑止する
+  const justDraggedRef = useRef(false);
 
   const slots = allSlots.filter((s) => s.issue_id === issueId);
   const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -52,6 +96,48 @@ export function LayoutBoard({
 
   // 8ページ＝1列、列内は2ページ＝1見開き（右=奇数 / 左=偶数）
   const columns = chunk(pages, 8).map((colPages) => chunk(colPages, 2));
+
+  const handlePointerDown = (
+    e: React.PointerEvent<HTMLButtonElement>,
+    slot: LayoutSlot,
+  ) => {
+    if (!signedIn || e.button !== 0) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { id: slot.id, started: false, sx: e.clientX, sy: e.clientY };
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    if (!d.started) {
+      if (Math.hypot(e.clientX - d.sx, e.clientY - d.sy) < DRAG_THRESHOLD) return;
+      d.started = true;
+      setDragId(d.id);
+    }
+    const slot = slots.find((s) => s.id === d.id);
+    setGhost({
+      x: e.clientX,
+      y: e.clientY,
+      label: slot?.display_name || slot?.company_name || slot?.size || "",
+    });
+    const cell = cellFromPoint(e.clientX, e.clientY, d.id);
+    setOverCell(cell ? `${cell.page}:${cell.col}:${cell.row}` : null);
+  };
+
+  const endDrag = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = dragRef.current;
+    if (!d) return;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    if (d.started) {
+      justDraggedRef.current = true;
+      const cell = cellFromPoint(e.clientX, e.clientY, d.id);
+      if (cell) void placeSlot(d.id, cell.page, cell.col, cell.row);
+    }
+    dragRef.current = null;
+    setDragId(null);
+    setOverCell(null);
+    setGhost(null);
+  };
 
   const renderPage = (page: number) => {
     const pageSlots = slots.filter((s) => s.page_no === page);
@@ -84,20 +170,8 @@ export function LayoutBoard({
             return (
               <div
                 key={`cell-${c}-${r}`}
-                data-cell={`${page}:${c}:${r}`}
+                data-cell={key}
                 style={{ gridColumn: c + 1, gridRow: r + 1 }}
-                onDragOver={(e) => {
-                  if (!dragId) return;
-                  e.preventDefault();
-                  setOverCell(key);
-                }}
-                onDragLeave={() => setOverCell((v) => (v === key ? null : v))}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setOverCell(null);
-                  if (dragId) void placeSlot(dragId, page, c, r);
-                  setDragId(null);
-                }}
                 className={`rounded-md border border-dashed transition-colors ${
                   dragId
                     ? overCell === key
@@ -122,41 +196,30 @@ export function LayoutBoard({
               <button
                 key={slot.id}
                 type="button"
-                draggable={signedIn}
-                onDragStart={(e) => {
-                  setDragId(slot.id);
-                  e.dataTransfer.effectAllowed = "move";
-                  e.dataTransfer.setData("text/plain", slot.id);
+                data-slot-id={slot.id}
+                data-cell={cellKey}
+                onPointerDown={(e) => handlePointerDown(e, slot)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={endDrag}
+                onPointerCancel={endDrag}
+                onClick={() => {
+                  if (justDraggedRef.current) {
+                    justDraggedRef.current = false;
+                    return; // 直前のドラッグ操作ではダイアログを開かない
+                  }
+                  if (signedIn) setSelected(slot);
                 }}
-                onDragEnd={() => {
-                  setDragId(null);
-                  setOverCell(null);
-                }}
-                // 枠自体をドロップ先に（埋まったマスへも配置＝入れ替え可能）
-                onDragOver={(e) => {
-                  if (!dragId || dragging) return;
-                  e.preventDefault();
-                  setOverCell(cellKey);
-                }}
-                onDrop={(e) => {
-                  if (!dragId || dragging) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setOverCell(null);
-                  void placeSlot(dragId, page, col, row);
-                  setDragId(null);
-                }}
-                onClick={() => signedIn && setSelected(slot)}
                 disabled={!signedIn}
                 style={{
                   gridColumn: `${col + 1} / span ${colSpan}`,
                   gridRow: `${row + 1} / span ${rowSpan}`,
-                  zIndex: dragging ? 0 : 10,
+                  zIndex: dragging ? 30 : 10,
+                  touchAction: signedIn ? "none" : undefined,
                 }}
                 className={`flex flex-col justify-between overflow-hidden rounded-md border-2 p-1.5 text-left text-xs transition-all ${style.border} ${
                   hasManuscript || supplied ? style.softBg : "bg-background"
                 } ${signedIn ? "cursor-grab hover:shadow-md active:cursor-grabbing" : "cursor-default"} ${
-                  dragging ? "pointer-events-none opacity-30" : ""
+                  dragging ? "opacity-40" : ""
                 } ${isDropTarget ? "ring-2 ring-primary ring-offset-1" : ""}`}
               >
                 <div className="flex items-center justify-between gap-1">
@@ -225,6 +288,16 @@ export function LayoutBoard({
           ))}
         </div>
       </div>
+
+      {/* ドラッグ中に指先/カーソルへ追従するゴースト */}
+      {ghost && (
+        <div
+          className={`pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2 rounded-md border-2 px-2 py-1 text-xs font-medium shadow-lg ${style.border} ${style.softBg}`}
+          style={{ left: ghost.x, top: ghost.y }}
+        >
+          {ghost.label || "枠"}
+        </div>
+      )}
 
       <SlotActionDialog
         slot={selected}

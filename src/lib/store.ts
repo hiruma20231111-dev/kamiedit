@@ -13,6 +13,14 @@ import {
   type GoogleUser,
 } from "@/lib/google/gis";
 import * as drive from "@/lib/google/drive";
+import {
+  sizeSpan,
+  findFreeCell,
+  occupancyExcluding,
+  fits,
+  COLS,
+  ROWS,
+} from "@/lib/layout";
 import { emptyDb, type DriveDB } from "@/lib/db";
 import type {
   Issue,
@@ -75,11 +83,12 @@ interface StoreState {
   }) => Promise<LayoutSlot | null>;
   updateSlot: (id: string, patch: Partial<LayoutSlot>) => Promise<void>;
   deleteSlot: (id: string) => Promise<void>;
-  /** 割付の枠を別ページ／位置へ移動（D&D並べ替え）。beforeSlotId の前に挿入、null で末尾 */
-  moveSlot: (
+  /** 割付の枠をページ内の任意セル(col,row)へ自由配置（D&D）。別ページにも移動可 */
+  placeSlot: (
     slotId: string,
     toPage: number,
-    beforeSlotId: string | null,
+    col: number,
+    row: number,
   ) => Promise<void>;
 
   // 画像
@@ -306,50 +315,43 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
-  moveSlot: async (slotId, toPage, beforeSlotId) => {
+  placeSlot: async (slotId, toPage, col, row) => {
     const db = get().db;
     const slot = db.slots.find((s) => s.id === slotId);
     if (!slot) return;
-    const issueId = slot.issue_id;
 
-    const outside = db.slots.filter((s) => s.issue_id !== issueId);
-    const issueSlots = db.slots.filter(
-      (s) => s.issue_id === issueId && s.id !== slotId,
+    const span = sizeSpan(slot.size);
+    // グリッド範囲内にクランプ
+    let c = Math.max(0, Math.min(col, COLS - span.col));
+    let r = Math.max(0, Math.min(row, ROWS - span.row));
+
+    // 移動先ページの既存配置（自分を除く）と衝突するなら空きへフォールバック
+    const targetPageSlots = db.slots.filter(
+      (s) =>
+        s.issue_id === slot.issue_id &&
+        s.page_no === toPage &&
+        s.id !== slotId,
     );
-
-    // ページごとに position 順で並べる
-    const pages = new Map<number, LayoutSlot[]>();
-    for (const s of issueSlots) {
-      const arr = pages.get(s.page_no) ?? [];
-      arr.push(s);
-      pages.set(s.page_no, arr);
+    const occupied = occupancyExcluding(
+      [...targetPageSlots, { ...slot, page_no: toPage, col: c, row: r }],
+      slotId,
+    );
+    if (!fits(occupied, c, r, span)) {
+      const free = findFreeCell(occupied, span);
+      if (free) {
+        c = free.col;
+        r = free.row;
+      }
     }
-    for (const arr of pages.values())
-      arr.sort((a, b) => a.position - b.position);
 
-    // 移動先ページへ挿入
-    const moved: LayoutSlot = { ...slot, page_no: toPage };
-    const target = pages.get(toPage) ?? [];
-    let insertAt = target.length;
-    if (beforeSlotId) {
-      const i = target.findIndex((s) => s.id === beforeSlotId);
-      if (i >= 0) insertAt = i;
-    }
-    target.splice(insertAt, 0, moved);
-    pages.set(toPage, target);
-
-    // position を振り直して再構築
     const now = new Date().toISOString();
-    const rebuilt: LayoutSlot[] = [];
-    for (const [page, arr] of pages) {
-      arr.forEach((s, i) =>
-        rebuilt.push({ ...s, page_no: page, position: i, updated_at: now }),
-      );
-    }
-
     await get().commit({
       ...db,
-      slots: [...outside, ...rebuilt],
+      slots: db.slots.map((s) =>
+        s.id === slotId
+          ? { ...s, page_no: toPage, col: c, row: r, updated_at: now }
+          : s,
+      ),
       updatedAt: now,
     });
   },
@@ -519,11 +521,17 @@ export const useStore = create<StoreState>((set, get) => ({
     const pageSlots = db.slots.filter(
       (s) => s.issue_id === input.issueId && s.page_no === input.pageNo,
     );
+    // 空きセルへ自動配置
+    const span = sizeSpan(input.size);
+    const occupied = occupancyExcluding(pageSlots, "");
+    const free = findFreeCell(occupied, span) ?? { col: 0, row: 0 };
     const slot: LayoutSlot = {
       id: uid(),
       issue_id: input.issueId,
       page_no: input.pageNo,
       position: pageSlots.length,
+      col: free.col,
+      row: free.row,
       size: input.size,
       kind: input.kind ?? "ad",
       company_name: input.companyName ?? null,

@@ -4,12 +4,17 @@ import { useState } from "react";
 import { useStore } from "@/lib/store";
 import { KIND_LABELS, type MediaConfig } from "@/lib/config/media";
 import type { LayoutSlot } from "@/lib/types";
-import { spanClass, sizeUnits } from "@/lib/layout";
+import { resolvePlacement, sizeUnits, COLS, ROWS } from "@/lib/layout";
 import { THEME_STYLES } from "@/lib/theme";
 import { AddFrameDialog } from "@/components/add-frame-dialog";
 import { SlotActionDialog } from "@/components/slot-action-dialog";
 import { Badge } from "@/components/ui/badge";
 import { PackageCheck, FileText } from "lucide-react";
+
+const CELLS: { c: number; r: number }[] = [];
+for (let r = 0; r < ROWS; r++) {
+  for (let c = 0; c < COLS; c++) CELLS.push({ c, r });
+}
 
 export function LayoutBoard({
   media,
@@ -23,10 +28,10 @@ export function LayoutBoard({
   const style = THEME_STYLES[media.theme];
   const signedIn = useStore((s) => s.signedIn);
   const allSlots = useStore((s) => s.db.slots);
-  const moveSlot = useStore((s) => s.moveSlot);
+  const placeSlot = useStore((s) => s.placeSlot);
   const [selected, setSelected] = useState<LayoutSlot | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overPage, setOverPage] = useState<number | null>(null);
+  const [overCell, setOverCell] = useState<string | null>(null);
 
   const slots = allSlots.filter((s) => s.issue_id === issueId);
   const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
@@ -38,16 +43,16 @@ export function LayoutBoard({
         <span>・</span>
         <span>確保枠 {slots.length} 件</span>
         {signedIn && (
-          <span className="text-xs">・枠はドラッグで配置換えできます</span>
+          <span className="text-xs">・枠はドラッグで好きな位置へ配置できます</span>
         )}
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {pages.map((page) => {
-          const pageSlots = slots
-            .filter((s) => s.page_no === page)
-            .sort((a, b) => a.position - b.position);
+          const pageSlots = slots.filter((s) => s.page_no === page);
+          const placed = resolvePlacement(pageSlots);
           const used = pageSlots.reduce((n, s) => n + sizeUnits(s.size), 0);
+
           return (
             <div key={page} className="rounded-lg border bg-card p-3">
               <div className="mb-2 flex items-center justify-between">
@@ -68,28 +73,48 @@ export function LayoutBoard({
                 </div>
               </div>
 
-              <div
-                className={`grid aspect-[3/4] grid-cols-2 grid-rows-4 gap-1.5 rounded-md transition-colors ${
-                  overPage === page ? "outline-2 outline-dashed outline-primary/50" : ""
-                }`}
-                onDragOver={(e) => {
-                  if (!dragId) return;
-                  e.preventDefault();
-                  setOverPage(page);
-                }}
-                onDragLeave={() => overPage === page && setOverPage(null)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setOverPage(null);
-                  if (dragId) void moveSlot(dragId, page, null);
-                  setDragId(null);
-                }}
-              >
-                {pageSlots.map((slot) => {
+              <div className="grid aspect-[3/4] grid-cols-2 grid-rows-4 gap-1.5">
+                {/* 背景のドロップセル（空き位置のみ受け付ける） */}
+                {CELLS.map(({ c, r }) => {
+                  const key = `${page}:${c}:${r}`;
+                  return (
+                    <div
+                      key={`cell-${c}-${r}`}
+                      style={{ gridColumn: c + 1, gridRow: r + 1 }}
+                      onDragOver={(e) => {
+                        if (!dragId) return;
+                        e.preventDefault();
+                        setOverCell(key);
+                      }}
+                      onDragLeave={() =>
+                        setOverCell((v) => (v === key ? null : v))
+                      }
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setOverCell(null);
+                        if (dragId) void placeSlot(dragId, page, c, r);
+                        setDragId(null);
+                      }}
+                      className={`rounded-md border border-dashed transition-colors ${
+                        dragId
+                          ? overCell === key
+                            ? `${style.softBg} border-primary`
+                            : "border-muted-foreground/30"
+                          : "border-transparent"
+                      }`}
+                    />
+                  );
+                })}
+
+                {/* 枠（明示配置） */}
+                {placed.map(({ slot, col, row, colSpan, rowSpan }) => {
                   const hasManuscript = !!slot.manuscript_id;
                   const supplied = slot.source_type === "supplied";
                   const kindLabel =
-                    slot.kind && slot.kind !== "ad" ? KIND_LABELS[slot.kind] : null;
+                    slot.kind && slot.kind !== "ad"
+                      ? KIND_LABELS[slot.kind]
+                      : null;
+                  const dragging = dragId === slot.id;
                   return (
                     <button
                       key={slot.id}
@@ -102,32 +127,27 @@ export function LayoutBoard({
                       }}
                       onDragEnd={() => {
                         setDragId(null);
-                        setOverPage(null);
-                      }}
-                      onDragOver={(e) => {
-                        if (!dragId || dragId === slot.id) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setOverPage(null);
-                        if (dragId && dragId !== slot.id)
-                          void moveSlot(dragId, page, slot.id);
-                        setDragId(null);
+                        setOverCell(null);
                       }}
                       onClick={() => signedIn && setSelected(slot)}
                       disabled={!signedIn}
-                      className={`${spanClass(slot.size)} flex flex-col justify-between overflow-hidden rounded-md border-2 p-1.5 text-left text-xs transition-all ${style.border} ${
+                      style={{
+                        gridColumn: `${col + 1} / span ${colSpan}`,
+                        gridRow: `${row + 1} / span ${rowSpan}`,
+                        zIndex: dragging ? 0 : 10,
+                      }}
+                      className={`flex flex-col justify-between overflow-hidden rounded-md border-2 p-1.5 text-left text-xs transition-all ${style.border} ${
                         hasManuscript || supplied ? style.softBg : "bg-background"
                       } ${signedIn ? "cursor-grab hover:shadow-md active:cursor-grabbing" : "cursor-default"} ${
-                        dragId === slot.id ? "opacity-40" : ""
+                        dragging ? "pointer-events-none opacity-30" : ""
                       }`}
                     >
                       <div className="flex items-center justify-between gap-1">
                         <div className="flex min-w-0 items-center gap-1">
-                          <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+                          <Badge
+                            variant="secondary"
+                            className="px-1 py-0 text-[10px]"
+                          >
                             {slot.size}
                           </Badge>
                           {kindLabel && (
@@ -150,13 +170,13 @@ export function LayoutBoard({
                     </button>
                   );
                 })}
-
-                {pageSlots.length === 0 && (
-                  <div className="col-span-2 row-span-4 flex items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
-                    {dragId ? "ここにドロップ" : "枠が未確保"}
-                  </div>
-                )}
               </div>
+
+              {pageSlots.length === 0 && (
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  {dragId ? "セルにドロップして配置" : "枠が未確保"}
+                </p>
+              )}
             </div>
           );
         })}

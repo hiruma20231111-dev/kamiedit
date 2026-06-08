@@ -64,6 +64,9 @@ export interface LayoutSlot {
   issue_id: string;
   page_no: number;
   position: number;
+  /** ページ内グリッドの配置（左上セル）。0始まり。未設定なら順序で自動配置 */
+  col?: number;
+  row?: number;
   size: string;
   kind?: ManuscriptKind;
   company_name: string | null;

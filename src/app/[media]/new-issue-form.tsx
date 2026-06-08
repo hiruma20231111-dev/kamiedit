@@ -22,6 +22,9 @@ export function NewIssueForm({
 }) {
   const router = useRouter();
   const addIssue = useStore((s) => s.addIssue);
+  const duplicateIssue = useStore((s) => s.duplicateIssue);
+  const allIssues = useStore((s) => s.db.issues);
+  const allSlots = useStore((s) => s.db.slots);
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -30,20 +33,47 @@ export function NewIssueForm({
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [pageCount, setPageCount] = useState(pageOptions?.[0] ?? 16);
+  // 流用モード
+  const [reuse, setReuse] = useState(false);
+  const [sourceId, setSourceId] = useState("");
+
+  // 同じ媒体の既存の号（流用元の候補）
+  const issues = allIssues.filter((i) => i.media_id === mediaId);
+  const canReuse = hasLayout && issues.length > 0;
+  const sourceIssue = issues.find((i) => i.id === sourceId);
+  const sourceFrameCount = sourceId
+    ? allSlots.filter((s) => s.issue_id === sourceId).length
+    : 0;
 
   function submit() {
     startTransition(async () => {
-      const issue = await addIssue({
-        mediaId,
-        name: name.trim() || `${year}年${month}月号`,
-        year,
-        month,
-        pageCount: hasLayout ? pageCount : null,
-      });
+      let issue;
+      if (reuse) {
+        if (!sourceId) {
+          toast.error("流用元の割付を選択してください");
+          return;
+        }
+        issue = await duplicateIssue(sourceId, {
+          mediaId,
+          name: name.trim() || `${year}年${month}月号`,
+          year,
+          month,
+        });
+      } else {
+        issue = await addIssue({
+          mediaId,
+          name: name.trim() || `${year}年${month}月号`,
+          year,
+          month,
+          pageCount: hasLayout ? pageCount : null,
+        });
+      }
       if (issue) {
-        toast.success("号数を作成しました");
+        toast.success(reuse ? "割付を流用して作成しました" : "号数を作成しました");
         setOpen(false);
         setName("");
+        setReuse(false);
+        setSourceId("");
         router.push(`/${mediaId}/${issue.id}`);
       } else {
         toast.error("作成に失敗しました（ログイン状態をご確認ください）");
@@ -66,6 +96,62 @@ export function NewIssueForm({
     <Card className="w-full max-w-md p-5">
       <h3 className="mb-4 font-semibold">{actionLabel}</h3>
       <div className="space-y-4">
+        {canReuse && (
+          <div>
+            <Label>作成方法</Label>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setReuse(false)}
+                className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                  !reuse
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                ゼロから作成
+              </button>
+              <button
+                type="button"
+                onClick={() => setReuse(true)}
+                className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                  reuse
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                割付を流用
+              </button>
+            </div>
+          </div>
+        )}
+
+        {reuse && (
+          <div>
+            <Label htmlFor="source">流用元の割付</Label>
+            <select
+              id="source"
+              value={sourceId}
+              onChange={(e) => setSourceId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <option value="">選択してください</option>
+              {issues.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
+                  {i.page_count ? `（${i.page_count}P）` : ""}
+                </option>
+              ))}
+            </select>
+            {sourceIssue && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                「{sourceIssue.name}」の枠 {sourceFrameCount} 件とページ構成（
+                {sourceIssue.page_count ?? "—"}P）を引き継ぎます。原稿の中身は引き継ぎません。
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label htmlFor="year">年</Label>
@@ -99,7 +185,7 @@ export function NewIssueForm({
           />
         </div>
 
-        {hasLayout && pageOptions && (
+        {hasLayout && pageOptions && !reuse && (
           <div>
             <Label>ページ構成</Label>
             <div className="mt-1 flex flex-wrap gap-2">

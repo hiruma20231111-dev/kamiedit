@@ -59,6 +59,17 @@ interface StoreState {
     pageCount?: number | null;
   }) => Promise<Issue | null>;
   deleteIssue: (id: string) => Promise<void>;
+  /** 既存の号の割付（枠）を流用して新しい号を作成する */
+  duplicateIssue: (
+    sourceIssueId: string,
+    input: {
+      mediaId: MediaId;
+      name: string;
+      year?: number | null;
+      month?: number | null;
+      pageCount?: number | null;
+    },
+  ) => Promise<Issue | null>;
 
   // 原稿
   addManuscript: (input: {
@@ -314,6 +325,42 @@ export const useStore = create<StoreState>((set, get) => ({
       slots: db.slots.filter((s) => s.issue_id !== id),
       updatedAt: new Date().toISOString(),
     });
+  },
+
+  duplicateIssue: async (sourceIssueId, input) => {
+    const now = new Date().toISOString();
+    const db = get().db;
+    const source = db.issues.find((i) => i.id === sourceIssueId);
+    const issue: Issue = {
+      id: uid(),
+      media_id: input.mediaId,
+      name: input.name,
+      year: input.year ?? null,
+      month: input.month ?? null,
+      page_count: input.pageCount ?? source?.page_count ?? null,
+      created_by: get().user?.email ?? null,
+      created_at: now,
+      updated_at: now,
+    };
+    // 流用元の枠をコピー（原稿リンクは引き継がず、空の枠として複製）
+    const newSlots: LayoutSlot[] = db.slots
+      .filter((s) => s.issue_id === sourceIssueId)
+      .map((s) => ({
+        ...s,
+        id: uid(),
+        issue_id: issue.id,
+        manuscript_id: null,
+        source_type: null,
+        created_at: now,
+        updated_at: now,
+      }));
+    const ok = await get().commit({
+      ...db,
+      issues: [issue, ...db.issues],
+      slots: [...db.slots, ...newSlots],
+      updatedAt: now,
+    });
+    return ok ? issue : null;
   },
 
   placeSlot: async (slotId, toPage, col, row) => {

@@ -6,8 +6,19 @@
  *   文字数(maxLength)は暫定値（要確定）。media-data PDF 入手後に更新する。
  */
 
+import type { ManuscriptKind } from "@/lib/types";
+
 export type MediaId = "mamitan" | "pado" | "shin_domo";
 export type ThemeColor = "pink" | "blue" | "orange";
+
+/** 原稿種類の選択肢・表示名 */
+export const KIND_OPTIONS: ManuscriptKind[] = ["ad", "inhouse", "lead", "cover"];
+export const KIND_LABELS: Record<ManuscriptKind, string> = {
+  ad: "広告",
+  inhouse: "自社稿",
+  lead: "巻頭記事",
+  cover: "表紙",
+};
 
 export interface FieldDef {
   key: string;

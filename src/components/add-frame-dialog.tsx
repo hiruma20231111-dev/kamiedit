@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useStore } from "@/lib/store";
-import type { MediaConfig } from "@/lib/config/media";
+import {
+  KIND_OPTIONS,
+  KIND_LABELS,
+  type MediaConfig,
+} from "@/lib/config/media";
+import type { ManuscriptKind } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +34,7 @@ export function AddFrameDialog({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [size, setSize] = useState(media.sizes[0]?.size ?? "1/8");
+  const [kind, setKind] = useState<ManuscriptKind>("ad");
   const [company, setCompany] = useState("");
   const [display, setDisplay] = useState("");
 
@@ -38,6 +44,7 @@ export function AddFrameDialog({
         issueId,
         pageNo,
         size,
+        kind,
         companyName: company.trim() || null,
         displayName: display.trim() || null,
       });
@@ -80,6 +87,26 @@ export function AddFrameDialog({
                   }`}
                 >
                   {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <Label>原稿種類</Label>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {KIND_OPTIONS.map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setKind(k)}
+                  className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                    kind === k
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "hover:bg-muted"
+                  }`}
+                >
+                  {KIND_LABELS[k]}
                 </button>
               ))}
             </div>

@@ -6,6 +6,8 @@
 export type Role = "admin" | "editor";
 export type ManuscriptStatus = "draft" | "done";
 export type SourceType = "new" | "reuse" | "edit" | "supplied";
+/** 原稿種類: 広告 / 自社稿 / 巻頭記事 / 表紙 */
+export type ManuscriptKind = "ad" | "inhouse" | "lead" | "cover";
 
 export interface Media {
   id: string;
@@ -43,6 +45,7 @@ export interface Manuscript {
   media_id: string;
   size: string;
   variant: string | null;
+  kind?: ManuscriptKind;
   company_name: string | null;
   display_name: string | null;
   genre: string | null;
@@ -62,6 +65,7 @@ export interface LayoutSlot {
   page_no: number;
   position: number;
   size: string;
+  kind?: ManuscriptKind;
   company_name: string | null;
   display_name: string | null;
   manuscript_id: string | null;

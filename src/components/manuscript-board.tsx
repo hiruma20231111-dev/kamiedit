@@ -4,7 +4,12 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import type { MediaConfig } from "@/lib/config/media";
+import {
+  KIND_OPTIONS,
+  KIND_LABELS,
+  type MediaConfig,
+} from "@/lib/config/media";
+import type { ManuscriptKind } from "@/lib/types";
 import { THEME_STYLES } from "@/lib/theme";
 import {
   Dialog,
@@ -38,6 +43,7 @@ export function ManuscriptBoard({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [size, setSize] = useState(media.sizes[0]?.size ?? "");
+  const [kind, setKind] = useState<ManuscriptKind>("ad");
   const [company, setCompany] = useState("");
   const [display, setDisplay] = useState("");
 
@@ -47,6 +53,7 @@ export function ManuscriptBoard({
         issueId,
         mediaId: media.id,
         size,
+        kind,
         companyName: company.trim() || null,
         displayName: display.trim() || null,
       });
@@ -99,6 +106,25 @@ export function ManuscriptBoard({
                         }`}
                       >
                         {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <Label>原稿種類</Label>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {KIND_OPTIONS.map((k) => (
+                      <button
+                        key={k}
+                        type="button"
+                        onClick={() => setKind(k)}
+                        className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                          kind === k
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        {KIND_LABELS[k]}
                       </button>
                     ))}
                   </div>
@@ -158,6 +184,9 @@ export function ManuscriptBoard({
                 className="flex flex-1 items-center gap-3"
               >
                 <Badge variant="secondary">{m.size}</Badge>
+                {m.kind && m.kind !== "ad" && (
+                  <Badge variant="outline">{KIND_LABELS[m.kind]}</Badge>
+                )}
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
                     {m.display_name || m.company_name || "（未入力）"}

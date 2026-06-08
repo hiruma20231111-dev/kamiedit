@@ -5,9 +5,12 @@ import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import {
   resolveFormat,
+  KIND_OPTIONS,
+  KIND_LABELS,
   type MediaConfig,
   type FieldDef,
 } from "@/lib/config/media";
+import type { ManuscriptKind } from "@/lib/types";
 import { THEME_STYLES } from "@/lib/theme";
 import type { Manuscript } from "@/lib/types";
 import { DriveImage } from "@/components/drive-image";
@@ -82,6 +85,7 @@ export function ManuscriptEditor({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [variant, setVariant] = useState<string | null>(manuscript.variant);
+  const [kind, setKind] = useState<ManuscriptKind>(manuscript.kind ?? "ad");
   const [genre, setGenre] = useState(manuscript.genre ?? "");
   const [tone, setTone] = useState(manuscript.tone ?? "");
   const [target, setTarget] = useState(manuscript.target ?? "");
@@ -114,6 +118,7 @@ export function ManuscriptEditor({
     startTransition(async () => {
       await updateManuscript(manuscript.id, {
         variant,
+        kind,
         genre: genre || null,
         tone: tone || null,
         target: target || null,
@@ -172,6 +177,26 @@ export function ManuscriptEditor({
               onChange={(e) => setDisplay(e.target.value)}
               placeholder="掲載名・店舗名"
             />
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <Label>原稿種類</Label>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {KIND_OPTIONS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setKind(k)}
+                className={`rounded-md border px-3 py-1.5 text-sm transition-colors ${
+                  kind === k
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "hover:bg-muted"
+                }`}
+              >
+                {KIND_LABELS[k]}
+              </button>
+            ))}
           </div>
         </div>
 

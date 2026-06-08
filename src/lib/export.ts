@@ -5,7 +5,7 @@
  */
 import JSZip from "jszip";
 import type { Manuscript, ManuscriptImage, LayoutSlot, Issue } from "@/lib/types";
-import { resolveFormat, type MediaConfig } from "@/lib/config/media";
+import { resolveFormat, KIND_LABELS, type MediaConfig } from "@/lib/config/media";
 import { downloadFile } from "@/lib/google/drive";
 
 export interface ExportCtx {
@@ -68,6 +68,7 @@ export function buildInstructionHtml(
       return `<section>
         <div class="head">
           <span class="size">${esc(m.size)}${m.variant ? `（${esc(m.variant)}）` : ""}</span>
+          ${m.kind && m.kind !== "ad" ? `<span class="kind">${esc(KIND_LABELS[m.kind])}</span>` : ""}
           <span class="name">${esc(m.display_name || m.company_name || "（未入力）")}</span>
           <span class="loc">${locStr}</span>
         </div>
@@ -87,6 +88,7 @@ export function buildInstructionHtml(
     section{border:1px solid #ccc;border-radius:8px;padding:12px 14px;margin-bottom:14px;page-break-inside:avoid;}
     .head{display:flex;gap:12px;align-items:baseline;margin-bottom:8px;border-bottom:1px solid #eee;padding-bottom:6px;}
     .size{background:#111;color:#fff;border-radius:4px;padding:2px 8px;font-size:12px;}
+    .kind{background:#eef;color:#33c;border:1px solid #ccd;border-radius:4px;padding:2px 6px;font-size:11px;}
     .name{font-weight:700;font-size:15px;}
     .loc{margin-left:auto;color:#666;font-size:12px;}
     table{width:100%;border-collapse:collapse;}

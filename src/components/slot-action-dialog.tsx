@@ -53,6 +53,7 @@ export function SlotActionDialog({
           issueId,
           mediaId: media.id,
           size: slot.size,
+          kind: slot.kind,
           companyName: slot.company_name,
           displayName: slot.display_name,
         });

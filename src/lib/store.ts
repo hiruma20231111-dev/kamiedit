@@ -19,6 +19,7 @@ import type {
   Manuscript,
   LayoutSlot,
   ManuscriptImage,
+  ManuscriptKind,
 } from "@/lib/types";
 import type { MediaId } from "@/lib/config/media";
 
@@ -55,6 +56,7 @@ interface StoreState {
     mediaId: MediaId;
     size: string;
     variant?: string | null;
+    kind?: ManuscriptKind;
     companyName?: string | null;
     displayName?: string | null;
   }) => Promise<Manuscript | null>;
@@ -66,11 +68,18 @@ interface StoreState {
     issueId: string;
     pageNo: number;
     size: string;
+    kind?: ManuscriptKind;
     companyName?: string | null;
     displayName?: string | null;
   }) => Promise<LayoutSlot | null>;
   updateSlot: (id: string, patch: Partial<LayoutSlot>) => Promise<void>;
   deleteSlot: (id: string) => Promise<void>;
+  /** 割付の枠を別ページ／位置へ移動（D&D並べ替え）。beforeSlotId の前に挿入、null で末尾 */
+  moveSlot: (
+    slotId: string,
+    toPage: number,
+    beforeSlotId: string | null,
+  ) => Promise<void>;
 
   // 画像
   uploadImage: (
@@ -232,6 +241,54 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  moveSlot: async (slotId, toPage, beforeSlotId) => {
+    const db = get().db;
+    const slot = db.slots.find((s) => s.id === slotId);
+    if (!slot) return;
+    const issueId = slot.issue_id;
+
+    const outside = db.slots.filter((s) => s.issue_id !== issueId);
+    const issueSlots = db.slots.filter(
+      (s) => s.issue_id === issueId && s.id !== slotId,
+    );
+
+    // ページごとに position 順で並べる
+    const pages = new Map<number, LayoutSlot[]>();
+    for (const s of issueSlots) {
+      const arr = pages.get(s.page_no) ?? [];
+      arr.push(s);
+      pages.set(s.page_no, arr);
+    }
+    for (const arr of pages.values())
+      arr.sort((a, b) => a.position - b.position);
+
+    // 移動先ページへ挿入
+    const moved: LayoutSlot = { ...slot, page_no: toPage };
+    const target = pages.get(toPage) ?? [];
+    let insertAt = target.length;
+    if (beforeSlotId) {
+      const i = target.findIndex((s) => s.id === beforeSlotId);
+      if (i >= 0) insertAt = i;
+    }
+    target.splice(insertAt, 0, moved);
+    pages.set(toPage, target);
+
+    // position を振り直して再構築
+    const now = new Date().toISOString();
+    const rebuilt: LayoutSlot[] = [];
+    for (const [page, arr] of pages) {
+      arr.forEach((s, i) =>
+        rebuilt.push({ ...s, page_no: page, position: i, updated_at: now }),
+      );
+    }
+
+    await get().commit({
+      ...db,
+      slots: [...outside, ...rebuilt],
+      updatedAt: now,
+    });
+  },
+
   uploadImage: async (manuscriptId, file, role) => {
     const { token, folderId, db } = get();
     if (!token || !folderId) {
@@ -313,6 +370,7 @@ export const useStore = create<StoreState>((set, get) => ({
       media_id: input.mediaId,
       size: input.size,
       variant: input.variant ?? null,
+      kind: input.kind ?? "ad",
       company_name: input.companyName ?? null,
       display_name: input.displayName ?? null,
       genre: null,
@@ -372,6 +430,7 @@ export const useStore = create<StoreState>((set, get) => ({
       page_no: input.pageNo,
       position: pageSlots.length,
       size: input.size,
+      kind: input.kind ?? "ad",
       company_name: input.companyName ?? null,
       display_name: input.displayName ?? null,
       manuscript_id: null,

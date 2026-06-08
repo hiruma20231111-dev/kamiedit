@@ -44,7 +44,9 @@ export function LayoutBoard({
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {pages.map((page) => {
-          const pageSlots = slots.filter((s) => s.page_no === page);
+          const pageSlots = slots
+            .filter((s) => s.page_no === page)
+            .sort((a, b) => a.position - b.position);
           const used = pageSlots.reduce((n, s) => n + sizeUnits(s.size), 0);
           return (
             <div key={page} className="rounded-lg border bg-card p-3">

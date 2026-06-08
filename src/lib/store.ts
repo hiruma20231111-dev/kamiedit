@@ -17,7 +17,8 @@ import {
   sizeSpan,
   findFreeCell,
   occupancyExcluding,
-  fits,
+  resolvePlacement,
+  rectsOverlap,
   COLS,
   ROWS,
 } from "@/lib/layout";
@@ -322,38 +323,71 @@ export const useStore = create<StoreState>((set, get) => ({
 
     const span = sizeSpan(slot.size);
     // グリッド範囲内にクランプ
-    let c = Math.max(0, Math.min(col, COLS - span.col));
-    let r = Math.max(0, Math.min(row, ROWS - span.row));
+    const c = Math.max(0, Math.min(col, COLS - span.col));
+    const r = Math.max(0, Math.min(row, ROWS - span.row));
+    const target = { col: c, row: r, colSpan: span.col, rowSpan: span.row };
 
-    // 移動先ページの既存配置（自分を除く）と衝突するなら空きへフォールバック
-    const targetPageSlots = db.slots.filter(
+    // 移動元ページでの自分の現在位置（スワップ時に相手をここへ移す）
+    const fromPlaced = resolvePlacement(
+      db.slots.filter(
+        (s) => s.issue_id === slot.issue_id && s.page_no === slot.page_no,
+      ),
+    ).find((p) => p.slot.id === slotId);
+    const fromCol = fromPlaced?.col ?? slot.col ?? 0;
+    const fromRow = fromPlaced?.row ?? slot.row ?? 0;
+
+    // 移動先ページの既存配置（自分を除く）。ぶつかる枠を特定する
+    const others = db.slots.filter(
       (s) =>
-        s.issue_id === slot.issue_id &&
-        s.page_no === toPage &&
-        s.id !== slotId,
+        s.issue_id === slot.issue_id && s.page_no === toPage && s.id !== slotId,
     );
-    const occupied = occupancyExcluding(
-      [...targetPageSlots, { ...slot, page_no: toPage, col: c, row: r }],
-      slotId,
+    const displaced = resolvePlacement(others).filter((p) =>
+      rectsOverlap(target, p),
     );
-    if (!fits(occupied, c, r, span)) {
-      const free = findFreeCell(occupied, span);
-      if (free) {
-        c = free.col;
-        r = free.row;
-      }
-    }
 
     const now = new Date().toISOString();
-    await get().commit({
-      ...db,
-      slots: db.slots.map((s) =>
+    let nextSlots: LayoutSlot[];
+
+    if (displaced.length === 0) {
+      // 空き → そのまま配置
+      nextSlots = db.slots.map((s) =>
         s.id === slotId
           ? { ...s, page_no: toPage, col: c, row: r, updated_at: now }
           : s,
-      ),
-      updatedAt: now,
-    });
+      );
+    } else if (
+      displaced.length === 1 &&
+      displaced[0].colSpan === span.col &&
+      displaced[0].rowSpan === span.row
+    ) {
+      // 同サイズの枠とぶつかる → 入れ替え（スワップ）
+      const otherId = displaced[0].slot.id;
+      nextSlots = db.slots.map((s) => {
+        if (s.id === slotId)
+          return { ...s, page_no: toPage, col: c, row: r, updated_at: now };
+        if (s.id === otherId)
+          return {
+            ...s,
+            page_no: slot.page_no,
+            col: fromCol,
+            row: fromRow,
+            updated_at: now,
+          };
+        return s;
+      });
+    } else {
+      // サイズ違い/複数とぶつかる → 自分を配置し、相手は座標クリアで空きへ再配置
+      const displacedIds = new Set(displaced.map((p) => p.slot.id));
+      nextSlots = db.slots.map((s) => {
+        if (s.id === slotId)
+          return { ...s, page_no: toPage, col: c, row: r, updated_at: now };
+        if (displacedIds.has(s.id))
+          return { ...s, col: undefined, row: undefined, updated_at: now };
+        return s;
+      });
+    }
+
+    await get().commit({ ...db, slots: nextSlots, updatedAt: now });
   },
 
   uploadImage: async (manuscriptId, file, role) => {

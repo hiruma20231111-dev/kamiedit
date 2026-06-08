@@ -153,4 +153,17 @@ export function occupancyExcluding(
   return occupied;
 }
 
+/** 2つの矩形（col,row,colSpan,rowSpan）が重なるか */
+export function rectsOverlap(
+  a: { col: number; row: number; colSpan: number; rowSpan: number },
+  b: { col: number; row: number; colSpan: number; rowSpan: number },
+): boolean {
+  return (
+    a.col < b.col + b.colSpan &&
+    b.col < a.col + a.colSpan &&
+    a.row < b.row + b.rowSpan &&
+    b.row < a.row + a.rowSpan
+  );
+}
+
 export { fits };

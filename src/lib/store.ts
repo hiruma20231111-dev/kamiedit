@@ -221,10 +221,11 @@ export const useStore = create<StoreState>((set, get) => ({
     }
     set({ signingIn: true, error: null });
     try {
+      // 毎回アカウント選択を出す（共有PCで別の人がログインできるように）
       const { token, expiresIn } = await getAccessToken(
         GOOGLE_CLIENT_ID,
         SCOPES,
-        "consent",
+        "select_account consent",
       );
       const user = await fetchUserInfo(token);
       const expiresAt = Date.now() + expiresIn * 1000;

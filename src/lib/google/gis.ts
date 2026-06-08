@@ -43,12 +43,12 @@ export interface TokenResult {
 /**
  * アクセストークンを取得する。
  * prompt: "" は無UIでの取得を試みる（セッションがあれば成功、無ければ失敗）。
- *          "consent"/"select_account" はUIを出す。
+ *          "consent" / "select_account" / "select_account consent"（複数指定可）はUIを出す。
  */
 export async function getAccessToken(
   clientId: string,
   scope: string,
-  prompt: "" | "consent" | "select_account" = "",
+  prompt: string = "",
 ): Promise<TokenResult> {
   await loadGisScript();
   const google = window.google;

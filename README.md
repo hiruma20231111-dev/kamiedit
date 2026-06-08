@@ -78,4 +78,8 @@ npm run dev
 - [x] **Step 3**: まみたん割付表（グリッドUI・枠確保・アクション選択）／ぱど・新DOMO 一覧
 - [x] **Step 4**: 原稿作成エディタ（動的フォーム・文字数ゲージ・画像D&D→Drive）
 - [x] **Step 5**: Gemini AIアシスト ＋ プロフィール（APIキー入力）
-- [ ] **Step 6**: エクスポート（指示書PDF・写真ZIP）
+- [x] **Step 6**: エクスポート（指示書PDF・写真ZIP・自動リネーム）
+
+### 残タスク
+- [ ] 本番 Vercel デプロイ（JS生成元に本番URL追加＋`NEXT_PUBLIC_GOOGLE_CLIENT_ID` 設定）
+- [ ] 新DOMO!ぱど・ぱどの正確な項目／文字数の確定（原稿用紙テンプレ入手後）

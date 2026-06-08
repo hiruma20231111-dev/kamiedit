@@ -14,7 +14,7 @@ import {
 } from "@/lib/google/gis";
 import * as drive from "@/lib/google/drive";
 import { emptyDb, type DriveDB } from "@/lib/db";
-import type { Issue } from "@/lib/types";
+import type { Issue, Manuscript, LayoutSlot } from "@/lib/types";
 import type { MediaId } from "@/lib/config/media";
 
 interface StoreState {
@@ -43,6 +43,32 @@ interface StoreState {
     pageCount?: number | null;
   }) => Promise<Issue | null>;
   deleteIssue: (id: string) => Promise<void>;
+
+  // 原稿
+  addManuscript: (input: {
+    issueId: string;
+    mediaId: MediaId;
+    size: string;
+    variant?: string | null;
+    companyName?: string | null;
+    displayName?: string | null;
+  }) => Promise<Manuscript | null>;
+  updateManuscript: (id: string, patch: Partial<Manuscript>) => Promise<void>;
+  deleteManuscript: (id: string) => Promise<void>;
+
+  // 割付の枠（まみたん）
+  addSlot: (input: {
+    issueId: string;
+    pageNo: number;
+    size: string;
+    companyName?: string | null;
+    displayName?: string | null;
+  }) => Promise<LayoutSlot | null>;
+  updateSlot: (id: string, patch: Partial<LayoutSlot>) => Promise<void>;
+  deleteSlot: (id: string) => Promise<void>;
+
+  /** db を更新して Drive へ保存（失敗時ロールバック） */
+  commit: (next: DriveDB) => Promise<boolean>;
 }
 
 function uid(): string {
@@ -191,5 +217,133 @@ export const useStore = create<StoreState>((set, get) => ({
     } finally {
       set({ saving: false });
     }
+  },
+
+  commit: async (next) => {
+    const { token, folderId, db } = get();
+    if (!token || !folderId) {
+      set({ error: "サインインが必要です" });
+      return false;
+    }
+    set({ saving: true, db: next, error: null });
+    try {
+      const fid = await drive.writeDb(token, folderId, get().dbFileId, next);
+      set({ dbFileId: fid });
+      return true;
+    } catch (e) {
+      set({ db, error: e instanceof Error ? e.message : "保存に失敗しました" });
+      return false;
+    } finally {
+      set({ saving: false });
+    }
+  },
+
+  addManuscript: async (input) => {
+    const now = new Date().toISOString();
+    const m: Manuscript = {
+      id: uid(),
+      issue_id: input.issueId,
+      media_id: input.mediaId,
+      size: input.size,
+      variant: input.variant ?? null,
+      company_name: input.companyName ?? null,
+      display_name: input.displayName ?? null,
+      genre: null,
+      tone: null,
+      target: null,
+      content: {},
+      remarks: null,
+      status: "draft",
+      created_by: get().user?.email ?? null,
+      created_at: now,
+      updated_at: now,
+    };
+    const db = get().db;
+    const ok = await get().commit({
+      ...db,
+      manuscripts: [m, ...db.manuscripts],
+      updatedAt: now,
+    });
+    return ok ? m : null;
+  },
+
+  updateManuscript: async (id, patch) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    await get().commit({
+      ...db,
+      manuscripts: db.manuscripts.map((m) =>
+        m.id === id ? { ...m, ...patch, updated_at: now } : m,
+      ),
+      updatedAt: now,
+    });
+  },
+
+  deleteManuscript: async (id) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    await get().commit({
+      ...db,
+      manuscripts: db.manuscripts.filter((m) => m.id !== id),
+      // 紐づく枠の参照を外す
+      slots: db.slots.map((s) =>
+        s.manuscript_id === id ? { ...s, manuscript_id: null } : s,
+      ),
+      updatedAt: now,
+    });
+  },
+
+  addSlot: async (input) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    const pageSlots = db.slots.filter(
+      (s) => s.issue_id === input.issueId && s.page_no === input.pageNo,
+    );
+    const slot: LayoutSlot = {
+      id: uid(),
+      issue_id: input.issueId,
+      page_no: input.pageNo,
+      position: pageSlots.length,
+      size: input.size,
+      company_name: input.companyName ?? null,
+      display_name: input.displayName ?? null,
+      manuscript_id: null,
+      source_type: null,
+      created_at: now,
+      updated_at: now,
+    };
+    const ok = await get().commit({
+      ...db,
+      slots: [...db.slots, slot],
+      updatedAt: now,
+    });
+    return ok ? slot : null;
+  },
+
+  updateSlot: async (id, patch) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    await get().commit({
+      ...db,
+      slots: db.slots.map((s) =>
+        s.id === id ? { ...s, ...patch, updated_at: now } : s,
+      ),
+      updatedAt: now,
+    });
+  },
+
+  deleteSlot: async (id) => {
+    const db = get().db;
+    const slot = db.slots.find((s) => s.id === id);
+    const now = new Date().toISOString();
+    await get().commit({
+      ...db,
+      slots: db.slots.filter((s) => s.id !== id),
+      // 枠専用に作られた原稿も併せて削除（流用元は触らない方針だが今は枠の原稿を削除）
+      manuscripts: slot?.manuscript_id
+        ? db.manuscripts.filter((m) => m.id !== slot.manuscript_id)
+        : db.manuscripts,
+      updatedAt: now,
+    });
   },
 }));

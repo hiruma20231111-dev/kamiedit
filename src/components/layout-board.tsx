@@ -80,6 +80,7 @@ export function LayoutBoard({
                   return (
                     <div
                       key={`cell-${c}-${r}`}
+                      data-cell={`${page}:${c}:${r}`}
                       style={{ gridColumn: c + 1, gridRow: r + 1 }}
                       onDragOver={(e) => {
                         if (!dragId) return;

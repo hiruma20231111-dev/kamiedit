@@ -8,6 +8,7 @@ import { THEME_STYLES } from "@/lib/theme";
 import { useStore } from "@/lib/store";
 import { NewIssueForm } from "./new-issue-form";
 import { DeleteIssueButton } from "@/components/delete-issue-button";
+import { ImportLayoutButton } from "@/components/import-layout-button";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react";
 
@@ -54,11 +55,14 @@ export default function MediaPage({
           {media.hasLayout ? "割付を選択" : "号を選択"}
         </h2>
         {signedIn && (
-          <NewIssueForm
-            mediaId={media.id}
-            hasLayout={media.hasLayout}
-            pageOptions={media.pageOptions}
-          />
+          <div className="flex items-center gap-2">
+            {media.hasLayout && <ImportLayoutButton mediaId={media.id} />}
+            <NewIssueForm
+              mediaId={media.id}
+              hasLayout={media.hasLayout}
+              pageOptions={media.pageOptions}
+            />
+          </div>
         )}
       </div>
 

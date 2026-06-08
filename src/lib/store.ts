@@ -23,6 +23,11 @@ import {
   ROWS,
 } from "@/lib/layout";
 import { emptyDb, type DriveDB } from "@/lib/db";
+import {
+  LAYOUT_PKG_KIND,
+  LAYOUT_PKG_VERSION,
+  type LayoutPackage,
+} from "@/lib/layout-transfer";
 import type {
   Issue,
   Manuscript,
@@ -70,6 +75,10 @@ interface StoreState {
       pageCount?: number | null;
     },
   ) => Promise<Issue | null>;
+  /** 号の割付を受け渡し用パッケージへ書き出す（同期・画像は含めない） */
+  exportIssue: (issueId: string) => LayoutPackage | null;
+  /** 受け渡しパッケージを取り込み、新しい号として作成する */
+  importIssue: (pkg: LayoutPackage) => Promise<Issue | null>;
 
   // 原稿
   addManuscript: (input: {
@@ -359,6 +368,70 @@ export const useStore = create<StoreState>((set, get) => ({
       ...db,
       issues: [issue, ...db.issues],
       slots: [...db.slots, ...newSlots],
+      updatedAt: now,
+    });
+    return ok ? issue : null;
+  },
+
+  exportIssue: (issueId) => {
+    const db = get().db;
+    const issue = db.issues.find((i) => i.id === issueId);
+    if (!issue) return null;
+    return {
+      kind: LAYOUT_PKG_KIND,
+      version: LAYOUT_PKG_VERSION,
+      exportedAt: new Date().toISOString(),
+      mediaId: issue.media_id,
+      issueName: issue.name,
+      pageCount: issue.page_count,
+      slots: db.slots.filter((s) => s.issue_id === issueId),
+      manuscripts: db.manuscripts.filter((m) => m.issue_id === issueId),
+    };
+  },
+
+  importIssue: async (pkg) => {
+    const now = new Date().toISOString();
+    const db = get().db;
+    const me = get().user?.email ?? null;
+    const newIssueId = uid();
+    const issue: Issue = {
+      id: newIssueId,
+      media_id: pkg.mediaId,
+      name: `${pkg.issueName}（取り込み）`,
+      year: null,
+      month: null,
+      page_count: pkg.pageCount,
+      created_by: me,
+      created_at: now,
+      updated_at: now,
+    };
+    // 原稿IDを振り直し（枠からの参照も付け替える）。画像は引き継がない
+    const idMap = new Map<string, string>();
+    const manuscripts: Manuscript[] = pkg.manuscripts.map((m) => {
+      const nid = uid();
+      idMap.set(m.id, nid);
+      return {
+        ...m,
+        id: nid,
+        issue_id: newIssueId,
+        created_by: me,
+        created_at: now,
+        updated_at: now,
+      };
+    });
+    const slots: LayoutSlot[] = pkg.slots.map((s) => ({
+      ...s,
+      id: uid(),
+      issue_id: newIssueId,
+      manuscript_id: s.manuscript_id ? idMap.get(s.manuscript_id) ?? null : null,
+      created_at: now,
+      updated_at: now,
+    }));
+    const ok = await get().commit({
+      ...db,
+      issues: [issue, ...db.issues],
+      manuscripts: [...manuscripts, ...db.manuscripts],
+      slots: [...db.slots, ...slots],
       updatedAt: now,
     });
     return ok ? issue : null;

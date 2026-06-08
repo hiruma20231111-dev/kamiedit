@@ -11,6 +11,7 @@ import {
 import { THEME_STYLES } from "@/lib/theme";
 import type { Manuscript } from "@/lib/types";
 import { DriveImage } from "@/components/drive-image";
+import { AiAssistDialog } from "@/components/ai-assist-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,6 @@ import { Card } from "@/components/ui/card";
 import {
   Upload,
   Trash2,
-  Sparkles,
   Save,
   CheckCircle2,
 } from "lucide-react";
@@ -82,6 +82,9 @@ export function ManuscriptEditor({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [variant, setVariant] = useState<string | null>(manuscript.variant);
+  const [genre, setGenre] = useState(manuscript.genre ?? "");
+  const [tone, setTone] = useState(manuscript.tone ?? "");
+  const [target, setTarget] = useState(manuscript.target ?? "");
   const [company, setCompany] = useState(manuscript.company_name ?? "");
   const [display, setDisplay] = useState(manuscript.display_name ?? "");
   const [remarks, setRemarks] = useState(manuscript.remarks ?? "");
@@ -97,6 +100,11 @@ export function ManuscriptEditor({
   const fields: FieldDef[] = format?.fields ?? [];
   const imageCount = format?.imageCount ?? 0;
   const variants = format?.variants;
+  const sizeLabel =
+    media.sizes.find((s) => s.size === manuscript.size)?.label ?? manuscript.size;
+  const variantLabel = variants?.find(
+    (v) => v.id === (variant ?? variants[0]?.id),
+  )?.label;
 
   function setField(key: string, value: string) {
     setContent((c) => ({ ...c, [key]: value }));
@@ -106,6 +114,9 @@ export function ManuscriptEditor({
     startTransition(async () => {
       await updateManuscript(manuscript.id, {
         variant,
+        genre: genre || null,
+        tone: tone || null,
+        target: target || null,
         company_name: company.trim() || null,
         display_name: display.trim() || null,
         remarks: remarks.trim() || null,
@@ -187,15 +198,21 @@ export function ManuscriptEditor({
         )}
       </Card>
 
-      {/* AIアシスト（Step5） */}
-      <button
-        type="button"
-        onClick={() => toast.info("AIアシストは Step 5 で実装します")}
-        className={`flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed py-3 text-sm font-medium transition-colors hover:bg-muted/50 ${style.border} ${style.text}`}
-      >
-        <Sparkles className="h-4 w-4" />
-        ✨ AIに原稿を書いてもらう（Step 5）
-      </button>
+      {/* AIアシスト */}
+      <AiAssistDialog
+        mediaName={media.name}
+        sizeLabel={sizeLabel}
+        variantLabel={variantLabel}
+        fields={fields}
+        style={style}
+        initial={{ genre, tone, target }}
+        onApply={(values, params) => {
+          setContent((c) => ({ ...c, ...values }));
+          setGenre(params.genre);
+          setTone(params.tone);
+          setTarget(params.target);
+        }}
+      />
 
       {/* 動的フォーム */}
       <Card className="p-5">

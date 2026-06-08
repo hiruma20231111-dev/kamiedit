@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, User as UserIcon } from "lucide-react";
+import { LogOut, User as UserIcon, KeyRound } from "lucide-react";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -53,6 +54,7 @@ export function LoginButton({ className }: { className?: string }) {
 }
 
 export function UserMenu() {
+  const router = useRouter();
   const user = useStore((s) => s.user);
   const signOut = useStore((s) => s.signOut);
 
@@ -69,6 +71,10 @@ export function UserMenu() {
           {user?.email ?? "アカウント"}
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => router.push("/profile")}>
+          <KeyRound className="mr-2 h-4 w-4" />
+          プロフィール / APIキー
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => signOut()}>
           <LogOut className="mr-2 h-4 w-4" />
           ログアウト

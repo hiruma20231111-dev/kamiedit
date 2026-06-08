@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useStore } from "@/lib/store";
 import type { MediaConfig } from "@/lib/config/media";
-import type { Issue } from "@/lib/types";
+import type { Manuscript } from "@/lib/types";
 import {
   buildInstructionHtml,
   printInstruction,
@@ -22,31 +22,34 @@ import { Button } from "@/components/ui/button";
 import { Download, FileText, Images } from "lucide-react";
 import { toast } from "sonner";
 
-export function ExportPanel({
+/** 1原稿ぶんのデザイナー向け出力（指示書PDF / 写真ZIP） */
+export function ManuscriptExport({
   media,
-  issue,
+  issueId,
+  manuscript,
 }: {
   media: MediaConfig;
-  issue: Issue;
+  issueId: string;
+  manuscript: Manuscript;
 }) {
   const token = useStore((s) => s.token);
-  const allManuscripts = useStore((s) => s.db.manuscripts);
+  const issue = useStore((s) => s.db.issues.find((i) => i.id === issueId));
   const allSlots = useStore((s) => s.db.slots);
   const allImages = useStore((s) => s.db.images);
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
 
-  const manuscripts = allManuscripts.filter((m) => m.issue_id === issue.id);
-  const slots = allSlots.filter((s) => s.issue_id === issue.id);
-  const msIds = new Set(manuscripts.map((m) => m.id));
-  const images = allImages.filter((i) => msIds.has(i.manuscript_id));
+  if (!issue) return null;
+
+  const slots = allSlots.filter((s) => s.issue_id === issueId);
+  const images = allImages
+    .filter((i) => i.manuscript_id === manuscript.id)
+    .sort((a, b) => a.sort_order - b.sort_order);
   const ctx: ExportCtx = { media, issue, slots };
+  const manuscripts = [manuscript];
+  const title = manuscript.display_name || manuscript.company_name || "この原稿";
 
   function doPrint() {
-    if (manuscripts.length === 0) {
-      toast.error("原稿がありません");
-      return;
-    }
     const html = buildInstructionHtml(manuscripts, images, ctx);
     const ok = printInstruction(html);
     if (!ok) toast.error("ポップアップがブロックされました。許可してください");
@@ -73,7 +76,7 @@ export function ExportPanel({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm transition-colors hover:bg-muted">
+      <DialogTrigger className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors hover:bg-muted">
         <Download className="h-4 w-4" />
         デザイナー向けDL
       </DialogTrigger>
@@ -81,7 +84,7 @@ export function ExportPanel({
         <DialogHeader>
           <DialogTitle>デザイナー向けダウンロード</DialogTitle>
           <DialogDescription>
-            {issue.name} の全原稿（{manuscripts.length}件 / 写真{images.length}点）を一括出力します。
+            「{title}」（写真{images.length}点）を出力します。
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">

@@ -15,6 +15,7 @@ import { THEME_STYLES } from "@/lib/theme";
 import type { Manuscript } from "@/lib/types";
 import { DriveImage } from "@/components/drive-image";
 import { AiAssistDialog } from "@/components/ai-assist-dialog";
+import { ManuscriptExport } from "@/components/manuscript-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -372,6 +373,13 @@ export function ManuscriptEditor({
         {(saving || pending) && (
           <span className="mr-auto text-xs text-muted-foreground">保存中…</span>
         )}
+        <div className={saving || pending ? "" : "mr-auto"}>
+          <ManuscriptExport
+            media={media}
+            issueId={issueId}
+            manuscript={manuscript}
+          />
+        </div>
         <Button variant="outline" onClick={() => router.push(`/${media.id}/${issueId}`)}>
           一覧へ戻る
         </Button>

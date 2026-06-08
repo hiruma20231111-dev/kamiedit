@@ -7,6 +7,7 @@ import { MEDIA, type MediaId } from "@/lib/config/media";
 import { THEME_STYLES } from "@/lib/theme";
 import { useStore } from "@/lib/store";
 import { NewIssueForm } from "./new-issue-form";
+import { DeleteIssueButton } from "@/components/delete-issue-button";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react";
 
@@ -82,19 +83,28 @@ export default function MediaPage({
       ) : (
         <div className="space-y-3">
           {issues.map((issue) => (
-            <Link key={issue.id} href={`/${media.id}/${issue.id}`}>
-              <Card className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50">
-                <div>
-                  <p className="font-semibold">{issue.name}</p>
+            <Card
+              key={issue.id}
+              className="flex items-center justify-between gap-2 p-4 transition-colors hover:bg-muted/50"
+            >
+              <Link
+                href={`/${media.id}/${issue.id}`}
+                className="flex min-w-0 flex-1 items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{issue.name}</p>
                   {media.hasLayout && issue.page_count && (
                     <p className="text-xs text-muted-foreground">
                       {issue.page_count}ページ構成
                     </p>
                   )}
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
-              </Card>
-            </Link>
+                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+              </Link>
+              {signedIn && (
+                <DeleteIssueButton issueId={issue.id} issueName={issue.name} />
+              )}
+            </Card>
           ))}
         </div>
       )}

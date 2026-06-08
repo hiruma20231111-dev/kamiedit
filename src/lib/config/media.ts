@@ -203,6 +203,19 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
       { size: "1/4Y", label: "1/4Y（横2枠）", variants: quarterVariants },
       { size: "1/2", label: "1/2（2×2）", variants: halfVariants },
       { size: "1/2T", label: "1/2T（縦4枠）", variants: halfVariants },
+      // 2/3（6マス＝2列×3行）。主に自社稿で使用
+      {
+        size: "2/3",
+        label: "2/3（6マス）",
+        imageCount: 8,
+        fields: [
+          genre,
+          { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 },
+          { key: "body", label: "本文", type: "textarea", maxLength: 400 },
+          { key: "caption", label: "メイン写真キャプション", type: "textarea", maxLength: 90 },
+          ...storeFields(),
+        ],
+      },
       // 割付上のフルページ枠（原稿項目は暫定）
       { size: "1P", label: "1ページ", imageCount: 8, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 }, { key: "body", label: "本文", type: "textarea", maxLength: 300 }, ...storeFields()] },
       { size: "2P", label: "2ページ(見開き)", imageCount: 12, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 60 }, { key: "body", label: "本文", type: "textarea", maxLength: 600 }, ...storeFields()] },

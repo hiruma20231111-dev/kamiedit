@@ -6,12 +6,14 @@ import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User as UserIcon, KeyRound } from "lucide-react";
+import { toast } from "sonner";
 
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
@@ -39,9 +41,20 @@ export function LoginButton({ className }: { className?: string }) {
   const signingIn = useStore((s) => s.signingIn);
   const configured = useStore((s) => s.configured);
 
+  async function handleSignIn() {
+    await signIn();
+    // Drive 許可が外れていたら明示的に知らせる（保存・取り込みが全て失敗するため）
+    if (useStore.getState().driveDenied) {
+      toast.error(
+        "Google ドライブのアクセスが許可されませんでした。もう一度ログインし、許可画面で「Google ドライブ」にチェックを入れてください。",
+        { duration: 8000 },
+      );
+    }
+  }
+
   return (
     <Button
-      onClick={() => void signIn()}
+      onClick={() => void handleSignIn()}
       variant="outline"
       className={className}
       disabled={signingIn || !configured}
@@ -67,9 +80,13 @@ export function UserMenu() {
         <UserIcon className="h-5 w-5" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate">
-          {user?.email ?? "アカウント"}
-        </DropdownMenuLabel>
+        {/* GroupLabel は Menu.Group の中でのみ使用可（Base UI 制約）。
+            囲まないと error #31 でクラッシュするため Group でラップする。 */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="truncate">
+            {user?.email ?? "アカウント"}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => router.push("/profile")}>
           <KeyRound className="mr-2 h-4 w-4" />

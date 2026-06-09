@@ -10,6 +10,7 @@ import { Settings } from "lucide-react";
 export function SiteHeader() {
   const configured = useStore((s) => s.configured);
   const signedIn = useStore((s) => s.signedIn);
+  const driveDenied = useStore((s) => s.driveDenied);
   const saving = useStore((s) => s.saving);
   const loading = useStore((s) => s.loading);
 
@@ -32,7 +33,16 @@ export function SiteHeader() {
               Google未接続
             </Badge>
           )}
-          {configured && signedIn && (
+          {configured && signedIn && driveDenied && (
+            <Badge
+              variant="outline"
+              className="hidden sm:inline-flex border-red-400 text-red-600"
+              title="Google ドライブのアクセスが許可されていません。再ログインして許可してください。"
+            >
+              Drive権限なし
+            </Badge>
+          )}
+          {configured && signedIn && !driveDenied && (
             <Badge variant="secondary" className="hidden sm:inline-flex">
               {saving ? "保存中…" : loading ? "読込中…" : "Drive同期"}
             </Badge>

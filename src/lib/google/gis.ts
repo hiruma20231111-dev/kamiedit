@@ -38,6 +38,8 @@ export interface TokenResult {
   token: string;
   /** 有効秒数（通常3600） */
   expiresIn: number;
+  /** 実際に付与されたスコープ（スペース区切り）。ユーザーが一部権限を外すと欠ける */
+  grantedScopes: string;
 }
 
 /**
@@ -67,6 +69,7 @@ export async function getAccessToken(
         resolve({
           token: resp.access_token as string,
           expiresIn: Number(resp.expires_in) || 3600,
+          grantedScopes: (resp.scope as string) ?? "",
         });
       },
       error_callback: (err: any) =>

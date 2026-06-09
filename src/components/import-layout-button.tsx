@@ -36,8 +36,14 @@ export function ImportLayoutButton({ mediaId }: { mediaId: string }) {
       if (issue) {
         toast.success("割付を取り込みました");
         router.push(`/${mediaId}/${issue.id}`);
+      } else if (useStore.getState().driveDenied) {
+        toast.error(
+          "Google ドライブへの保存が許可されていません。右上から再ログインし、許可画面で「Google ドライブ」にチェックを入れてください。",
+        );
       } else {
-        toast.error("取り込みに失敗しました（ログイン状態をご確認ください）");
+        toast.error(
+          useStore.getState().error ?? "取り込みに失敗しました。時間をおいて再度お試しください。",
+        );
       }
     });
   }

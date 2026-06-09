@@ -43,6 +43,8 @@ interface StoreState {
   initialized: boolean; // init 完了
   signingIn: boolean;
   signedIn: boolean;
+  /** ログインはできたが Google ドライブのアクセス許可が付与されていない状態 */
+  driveDenied: boolean;
   user: GoogleUser | null;
   token: string | null;
   expiresAt: number | null;
@@ -176,11 +178,18 @@ function clearSession() {
   window.localStorage.removeItem(SESSION_KEY);
 }
 
+/** 付与スコープに drive.file が含まれるか（同意画面でDrive許可を外すと欠ける） */
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+function hasDriveScope(grantedScopes: string): boolean {
+  return grantedScopes.split(/\s+/).includes(DRIVE_SCOPE);
+}
+
 export const useStore = create<StoreState>((set, get) => ({
   configured: hasGoogleEnv(),
   initialized: false,
   signingIn: false,
   signedIn: false,
+  driveDenied: false,
   user: null,
   token: null,
   expiresAt: null,
@@ -216,7 +225,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
     // 失効していたら無UIで更新を試す（以前ログインしていたユーザーのみ）
     try {
-      const { token, expiresIn } = await getAccessToken(
+      const { token, expiresIn, grantedScopes } = await getAccessToken(
         GOOGLE_CLIENT_ID,
         SCOPES,
         "",
@@ -224,7 +233,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const user = await fetchUserInfo(token);
       const expiresAt = Date.now() + expiresIn * 1000;
       saveSession({ token, expiresAt, user });
-      set({ token, expiresAt, user, signedIn: true });
+      set({ token, expiresAt, user, signedIn: true, driveDenied: !hasDriveScope(grantedScopes) });
       await get().reload();
     } catch {
       clearSession();
@@ -240,15 +249,24 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ signingIn: true, error: null });
     try {
       // 毎回アカウント選択を出す（共有PCで別の人がログインできるように）
-      const { token, expiresIn } = await getAccessToken(
+      const { token, expiresIn, grantedScopes } = await getAccessToken(
         GOOGLE_CLIENT_ID,
         SCOPES,
         "select_account consent",
       );
       const user = await fetchUserInfo(token);
       const expiresAt = Date.now() + expiresIn * 1000;
+      const driveDenied = !hasDriveScope(grantedScopes);
       saveSession({ token, expiresAt, user });
-      set({ token, expiresAt, user, signedIn: true });
+      set({ token, expiresAt, user, signedIn: true, driveDenied });
+      if (driveDenied) {
+        // Drive 許可が無いと保存・割付の取り込みが全て失敗する
+        set({
+          error:
+            "Google ドライブへのアクセスが許可されていません。右上から再度ログインし、許可画面で「Google ドライブ」のチェックを入れてください。",
+        });
+        return;
+      }
       await get().reload();
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "サインインに失敗しました" });
@@ -263,6 +281,7 @@ export const useStore = create<StoreState>((set, get) => ({
     clearSession();
     set({
       signedIn: false,
+      driveDenied: false,
       user: null,
       token: null,
       expiresAt: null,
@@ -305,9 +324,19 @@ export const useStore = create<StoreState>((set, get) => ({
         db = emptyDb();
         dbFileId = await drive.writeDb(token, folderId, null, db);
       }
-      set({ folderId, dbFileId, db });
+      set({ folderId, dbFileId, db, driveDenied: false });
     } catch (e) {
-      set({ error: e instanceof Error ? e.message : "読込に失敗しました" });
+      const msg = e instanceof Error ? e.message : "読込に失敗しました";
+      // 401/403 は Drive アクセス許可が無い可能性が高い
+      if (/\b(401|403)\b/.test(msg)) {
+        set({
+          driveDenied: true,
+          error:
+            "Google ドライブにアクセスできません。再ログインして「Google ドライブ」を許可してください。",
+        });
+      } else {
+        set({ error: msg });
+      }
     } finally {
       set({ loading: false });
     }
@@ -659,7 +688,17 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ dbFileId: fid });
       return true;
     } catch (e) {
-      set({ db: prevDb, error: e instanceof Error ? e.message : "保存に失敗しました" });
+      const msg = e instanceof Error ? e.message : "保存に失敗しました";
+      if (/\b(401|403)\b/.test(msg)) {
+        set({
+          db: prevDb,
+          driveDenied: true,
+          error:
+            "Google ドライブに保存できません（アクセス未許可）。再ログインして「Google ドライブ」を許可してください。",
+        });
+      } else {
+        set({ db: prevDb, error: msg });
+      }
       return false;
     } finally {
       set({ saving: false });

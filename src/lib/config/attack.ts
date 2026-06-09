@@ -59,7 +59,7 @@ export const ATTACK_FORMATS: Record<MediaId, AttackFormat> = {
     ],
     fields: recruitRequirements,
     hasFreeArea: true,
-    freeLabel: "フリーPR欄",
+    freeLabel: "アピール文（★PR）",
     freeMaxLength: 220,
     maxPhotos: 1,
   },

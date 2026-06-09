@@ -8,13 +8,14 @@ import { type MediaConfig } from "@/lib/config/media";
 import { ATTACK_FORMATS } from "@/lib/config/attack";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Megaphone, Plus, ChevronRight } from "lucide-react";
+import { Plus, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
-/** 媒体ページ下部に置く「アタック原稿（営業の仮提案原稿）」セクション */
-export function AttackSection({ media }: { media: MediaConfig }) {
+/** アタック原稿（営業の仮提案原稿）の一覧＋作成UI。媒体別アタックページの本体。 */
+export function AttackList({ media }: { media: MediaConfig }) {
   const router = useRouter();
   const signedIn = useStore((s) => s.signedIn);
+  const loading = useStore((s) => s.loading);
   const addAttack = useStore((s) => s.addAttack);
   const allAttacks = useStore((s) => s.db.attacks);
   const [picking, setPicking] = useState(false);
@@ -36,15 +37,9 @@ export function AttackSection({ media }: { media: MediaConfig }) {
   }
 
   return (
-    <section className="mt-12 border-t pt-8">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Megaphone className="h-5 w-5 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">アタック原稿</h2>
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            営業でクライアントに見せる仮の提案原稿
-          </span>
-        </div>
+    <div>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold">アタック原稿を選択</h2>
         {signedIn && !picking && (
           <button
             onClick={() => setPicking(true)}
@@ -83,15 +78,17 @@ export function AttackSection({ media }: { media: MediaConfig }) {
       )}
 
       {!signedIn ? (
-        <p className="text-sm text-muted-foreground">
-          アタック原稿の作成には Google ログインが必要です。
-        </p>
+        <Card className="p-10 text-center text-sm text-muted-foreground">
+          アタック原稿の作成・閲覧には右上から Google ログインしてください。
+        </Card>
       ) : attacks.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          まだアタック原稿がありません。「作成」から
-          {format.sizes.map((s) => s.label).join("・")}
-          サイズで作れます。
-        </p>
+        <Card className="p-10 text-center text-sm text-muted-foreground">
+          {loading
+            ? "読み込み中…"
+            : `まだアタック原稿がありません。「作成」から ${format.sizes
+                .map((s) => s.label)
+                .join("・")} サイズで作れます。`}
+        </Card>
       ) : (
         <div className="space-y-2">
           {attacks.map((a) => (
@@ -109,6 +106,6 @@ export function AttackSection({ media }: { media: MediaConfig }) {
           ))}
         </div>
       )}
-    </section>
+    </div>
   );
 }

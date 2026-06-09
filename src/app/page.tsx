@@ -3,6 +3,7 @@
 import { MEDIA_LIST } from "@/lib/config/media";
 import { useStore } from "@/lib/store";
 import { MediaCard } from "@/components/media-card";
+import { AttackCard } from "@/components/attack-card";
 import { Sparkles, TriangleAlert, Eye } from "lucide-react";
 
 export default function Home() {
@@ -53,7 +54,10 @@ export default function Home() {
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {MEDIA_LIST.map((media) => (
-            <MediaCard key={media.id} media={media} />
+            <div key={media.id} className="space-y-6">
+              <MediaCard media={media} />
+              <AttackCard media={media} />
+            </div>
           ))}
         </div>
       </div>

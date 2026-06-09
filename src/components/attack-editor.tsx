@@ -187,7 +187,7 @@ export function AttackEditor({
       {/* 要項/項目 */}
       <Card className="p-5">
         <h3 className="mb-4 font-semibold">
-          {format.hasFreeArea ? "募集要項（左面）" : "原稿項目"}
+          {format.hasFreeArea ? "募集要項" : "原稿項目"}
         </h3>
         <div className="space-y-4">
           {format.fields.map((f) => {
@@ -232,7 +232,7 @@ export function AttackEditor({
       {format.hasFreeArea && (
         <Card className="p-5">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="font-semibold">{format.freeLabel ?? "フリー欄"}（右面）</h3>
+            <h3 className="font-semibold">{format.freeLabel ?? "フリー欄"}</h3>
             <Button
               variant="outline"
               size="sm"

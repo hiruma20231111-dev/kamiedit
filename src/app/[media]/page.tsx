@@ -9,7 +9,6 @@ import { useStore } from "@/lib/store";
 import { NewIssueForm } from "./new-issue-form";
 import { DeleteIssueButton } from "@/components/delete-issue-button";
 import { ImportLayoutButton } from "@/components/import-layout-button";
-import { AttackSection } from "@/components/attack-section";
 import { Card } from "@/components/ui/card";
 import { ArrowLeft, BookOpen, ChevronRight } from "lucide-react";
 
@@ -113,8 +112,6 @@ export default function MediaPage({
           ))}
         </div>
       )}
-
-      <AttackSection media={media} />
     </div>
   );
 }

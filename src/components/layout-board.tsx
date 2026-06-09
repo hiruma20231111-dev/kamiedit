@@ -23,6 +23,23 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return out;
 }
 
+/** 1列に積む見開き数（= 旧来の8ページ/列） */
+const SPREADS_PER_COL = 4;
+
+/**
+ * 右綴じ冊子の見開き順を作る。各見開きは [右ページ, 左ページ]。
+ * 先頭の見開きは [最終ページ, 1ページ]（表裏表紙）、以降は [2,3],[4,5],[6,7]…。
+ */
+function buildSpreads(pageCount: number): [number, number | null][] {
+  if (pageCount <= 0) return [];
+  const spreads: [number, number | null][] = [[pageCount, 1]];
+  for (let right = 2; right <= pageCount - 2; right += 2) {
+    const left = right + 1;
+    spreads.push([right, left <= pageCount - 1 ? left : null]);
+  }
+  return spreads;
+}
+
 /** ドラッグ開始とみなす移動量（px）。これ未満はクリック扱い */
 const DRAG_THRESHOLD = 5;
 
@@ -86,16 +103,15 @@ export function LayoutBoard({
   const justDraggedRef = useRef(false);
 
   const slots = allSlots.filter((s) => s.issue_id === issueId);
-  const pages = Array.from({ length: pageCount }, (_, i) => i + 1);
 
-  // 本のように右から読む並びなので、初期表示は右端（P1）を見せる
+  // 本のように右から読む並びなので、初期表示は右端（表紙の見開き）を見せる
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollLeft = el.scrollWidth;
   }, [pageCount]);
 
-  // 8ページ＝1列、列内は2ページ＝1見開き（右=奇数 / 左=偶数）
-  const columns = chunk(pages, 8).map((colPages) => chunk(colPages, 2));
+  // 右綴じ冊子の見開き順（先頭=[最終ページ,1]、以降[2,3],[4,5]…）を列ごとにまとめる
+  const columns = chunk(buildSpreads(pageCount), SPREADS_PER_COL);
 
   const handlePointerDown = (
     e: React.PointerEvent<HTMLButtonElement>,
@@ -291,12 +307,21 @@ export function LayoutBoard({
         <div className="flex w-max flex-row-reverse justify-end gap-8">
           {columns.map((spreads, ci) => (
             <div key={ci} className="flex flex-col gap-5">
-              {spreads.map((pair, si) => (
+              {spreads.map((spread, si) => (
                 <div
                   key={si}
                   className="flex flex-row-reverse gap-1 rounded-xl bg-muted/40 p-1.5"
                 >
-                  {pair.map((page) => renderPage(page))}
+                  {spread.map((page, idx) =>
+                    page != null ? (
+                      renderPage(page)
+                    ) : (
+                      <div
+                        key={`empty-${idx}`}
+                        className="w-[150px] shrink-0 sm:w-[168px]"
+                      />
+                    ),
+                  )}
                 </div>
               ))}
             </div>

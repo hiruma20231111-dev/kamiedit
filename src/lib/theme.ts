@@ -45,4 +45,13 @@ export const THEME_STYLES: Record<ThemeColor, ThemeStyle> = {
     ring: "hover:ring-orange-400/60",
     label: "オレンジ",
   },
+  green: {
+    gradient: "from-green-600 to-lime-500",
+    text: "text-green-700 dark:text-green-400",
+    border: "border-green-300 dark:border-green-900/50",
+    softBg: "bg-green-50 dark:bg-green-950/30",
+    solid: "bg-green-600 hover:bg-green-700 text-white",
+    ring: "hover:ring-green-400/60",
+    label: "グリーン",
+  },
 };

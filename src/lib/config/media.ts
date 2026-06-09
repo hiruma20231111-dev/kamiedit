@@ -9,7 +9,7 @@
 import type { ManuscriptKind, ManuscriptCategory } from "@/lib/types";
 
 export type MediaId = "mamitan" | "pado" | "shin_domo";
-export type ThemeColor = "pink" | "blue" | "orange";
+export type ThemeColor = "pink" | "blue" | "orange" | "green";
 
 /** 原稿種類の選択肢・表示名（枠作成時に使う構造的な区分） */
 export const KIND_OPTIONS: ManuscriptKind[] = ["ad", "inhouse", "lead", "cover"];
@@ -86,15 +86,6 @@ function storeFields(suffix = "", lbl = ""): FieldDef[] {
 }
 
 const genre: FieldDef = { key: "genre", label: "業種", type: "text", maxLength: 8, hint: "8文字程度" };
-
-/** ぱど用 汎用フィールド（暫定） */
-const padoFields: FieldDef[] = [
-  genre,
-  { key: "catch", label: "キャッチコピー", type: "textarea", maxLength: 30, required: true },
-  { key: "body", label: "本文・PR文", type: "textarea", maxLength: 120 },
-  ...storeFields(),
-  { key: "coupon", label: "クーポン／インフォメーション", type: "textarea", maxLength: 60 },
-];
 
 /** 新DOMO!ぱど（求人特化）の項目（文字数は暫定） */
 const recruitFields: FieldDef[] = [
@@ -177,6 +168,42 @@ const halfVariants: SizeVariant[] = [
   },
 ];
 
+/** まみたん／家庭版ぱど 共通の割付サイズ（基本同仕様） */
+const layoutSizes: SizeFormat[] = [
+  {
+    size: "1/8",
+    label: "1/8",
+    imageCount: 1,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 20, required: true, hint: "10文字×2行＝20文字まで" },
+      { key: "body", label: "本文", type: "textarea", maxLength: 120, hint: "120文字以内" },
+      { key: "coupon", label: "クーポン／インフォメーション", type: "textarea", maxLength: 60 },
+      ...storeFields(),
+    ],
+  },
+  { size: "1/4", label: "1/4（縦）", variants: quarterVariants },
+  { size: "1/4Y", label: "1/4Y（横2枠）", variants: quarterVariants },
+  { size: "1/2", label: "1/2（2×2）", variants: halfVariants },
+  { size: "1/2T", label: "1/2T（縦4枠）", variants: halfVariants },
+  // 2/3（6マス＝2列×3行）。主に自社稿で使用
+  {
+    size: "2/3",
+    label: "2/3（6マス）",
+    imageCount: 8,
+    fields: [
+      genre,
+      { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 },
+      { key: "body", label: "本文", type: "textarea", maxLength: 400 },
+      { key: "caption", label: "メイン写真キャプション", type: "textarea", maxLength: 90 },
+      ...storeFields(),
+    ],
+  },
+  // 割付上のフルページ枠（原稿項目は暫定）
+  { size: "1P", label: "1ページ", imageCount: 8, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 }, { key: "body", label: "本文", type: "textarea", maxLength: 300 }, ...storeFields()] },
+  { size: "2P", label: "2ページ(見開き)", imageCount: 12, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 60 }, { key: "body", label: "本文", type: "textarea", maxLength: 600 }, ...storeFields()] },
+];
+
 export const MEDIA: Record<MediaId, MediaConfig> = {
   // ───────── まみたん（原稿用紙Excelより正確） ─────────
   mamitan: {
@@ -186,56 +213,18 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     hasLayout: true,
     cover: "/covers/mamitan.jpg",
     pageOptions: [16, 24, 32, 40],
-    sizes: [
-      {
-        size: "1/8",
-        label: "1/8",
-        imageCount: 1,
-        fields: [
-          genre,
-          { key: "catch", label: "キャッチ", type: "textarea", maxLength: 20, required: true, hint: "10文字×2行＝20文字まで" },
-          { key: "body", label: "本文", type: "textarea", maxLength: 120, hint: "120文字以内" },
-          { key: "coupon", label: "クーポン／インフォメーション", type: "textarea", maxLength: 60 },
-          ...storeFields(),
-        ],
-      },
-      { size: "1/4", label: "1/4（縦）", variants: quarterVariants },
-      { size: "1/4Y", label: "1/4Y（横2枠）", variants: quarterVariants },
-      { size: "1/2", label: "1/2（2×2）", variants: halfVariants },
-      { size: "1/2T", label: "1/2T（縦4枠）", variants: halfVariants },
-      // 2/3（6マス＝2列×3行）。主に自社稿で使用
-      {
-        size: "2/3",
-        label: "2/3（6マス）",
-        imageCount: 8,
-        fields: [
-          genre,
-          { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 },
-          { key: "body", label: "本文", type: "textarea", maxLength: 400 },
-          { key: "caption", label: "メイン写真キャプション", type: "textarea", maxLength: 90 },
-          ...storeFields(),
-        ],
-      },
-      // 割付上のフルページ枠（原稿項目は暫定）
-      { size: "1P", label: "1ページ", imageCount: 8, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 40 }, { key: "body", label: "本文", type: "textarea", maxLength: 300 }, ...storeFields()] },
-      { size: "2P", label: "2ページ(見開き)", imageCount: 12, fields: [genre, { key: "catch", label: "キャッチ", type: "textarea", maxLength: 60 }, { key: "body", label: "本文", type: "textarea", maxLength: 600 }, ...storeFields()] },
-    ],
+    sizes: layoutSizes,
   },
 
-  // ───────── ぱど（暫定） ─────────
+  // ───────── 家庭版ぱど（まみたん同様の割付対応・グリーン） ─────────
   pado: {
     id: "pado",
-    name: "ぱど",
-    theme: "blue",
-    hasLayout: false,
+    name: "家庭版ぱど",
+    theme: "green",
+    hasLayout: true,
     cover: "/covers/pado.jpg",
-    sizes: [
-      { size: "1/8", label: "1/8", fields: padoFields, imageCount: 1 },
-      { size: "1/4", label: "1/4", fields: padoFields, imageCount: 2 },
-      { size: "1/2", label: "1/2", fields: padoFields, imageCount: 4 },
-      { size: "1P", label: "1ページ", fields: padoFields, imageCount: 6 },
-      { size: "2P", label: "2ページ", fields: padoFields, imageCount: 10 },
-    ],
+    pageOptions: [16, 24, 32, 40],
+    sizes: layoutSizes,
   },
 
   // ───────── 新DOMO!ぱど（求人特化・暫定） ─────────

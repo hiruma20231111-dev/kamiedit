@@ -100,3 +100,54 @@ ${input.hearing}`;
   }
   return out;
 }
+
+/**
+ * アタック原稿（DOMOぱど）の右フリー欄テキストを、左の要項から生成する。
+ * 要項に書かれた範囲で雰囲気に合うPR文を作る（事実にない待遇は創作しない）。
+ */
+export async function generateAttackFreeText(
+  apiKey: string,
+  input: {
+    mediaName: string;
+    requirements: { label: string; value: string }[];
+    maxLength: number;
+  },
+): Promise<string> {
+  const reqText = input.requirements
+    .filter((r) => r.value && r.value.trim())
+    .map((r) => `- ${r.label}: ${r.value}`)
+    .join("\n");
+
+  const prompt = `あなたは求人フリーペーパー「${input.mediaName}」の編集者です。
+以下の求人要項をもとに、誌面の「フリーPR欄」に載せる魅力的な紹介文を作成してください。
+
+# 条件
+- 要項から読み取れる範囲で、仕事内容・職場の雰囲気・働きやすさ・応募を後押しする内容にする
+- 要項に書かれていない待遇や条件は創作しない（誇大・虚偽表現はNG）
+- ${input.maxLength}文字以内。適度に改行して読みやすく
+- 出力は本文テキストのみ（見出し・記号装飾・コードブロックは付けない）
+
+# 求人要項
+${reqText || "（要項が未入力です。一般的な応募促進文を簡潔に作成してください）"}`;
+
+  const res = await fetch(endpoint(GEMINI_MODEL, apiKey), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.8 },
+    }),
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    let msg = `Gemini API エラー (${res.status})`;
+    if (res.status === 400 && t.includes("API key")) msg = "APIキーが無効です";
+    if (res.status === 429) msg = "レート上限に達しました。少し待って再試行してください";
+    throw new Error(`${msg} ${t.slice(0, 160)}`);
+  }
+
+  const data = await res.json();
+  const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  return text.trim().slice(0, input.maxLength);
+}

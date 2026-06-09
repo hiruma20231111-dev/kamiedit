@@ -3,6 +3,7 @@ import type {
   Manuscript,
   LayoutSlot,
   ManuscriptImage,
+  AttackManuscript,
 } from "@/lib/types";
 
 /**
@@ -16,6 +17,7 @@ export interface DriveDB {
   manuscripts: Manuscript[];
   slots: LayoutSlot[];
   images: ManuscriptImage[];
+  attacks: AttackManuscript[];
   updatedAt: string;
 }
 
@@ -26,6 +28,7 @@ export function emptyDb(): DriveDB {
     manuscripts: [],
     slots: [],
     images: [],
+    attacks: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -41,6 +44,7 @@ export function normalizeDb(raw: unknown): DriveDB {
     manuscripts: Array.isArray(r.manuscripts) ? r.manuscripts : [],
     slots: Array.isArray(r.slots) ? r.slots : [],
     images: Array.isArray(r.images) ? r.images : [],
+    attacks: Array.isArray(r.attacks) ? r.attacks : [],
     updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : base.updatedAt,
   };
 }

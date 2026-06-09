@@ -34,6 +34,7 @@ import type {
   LayoutSlot,
   ManuscriptImage,
   ManuscriptKind,
+  AttackManuscript,
 } from "@/lib/types";
 import type { MediaId } from "@/lib/config/media";
 
@@ -79,6 +80,14 @@ interface StoreState {
   exportIssue: (issueId: string) => LayoutPackage | null;
   /** 受け渡しパッケージを取り込み、新しい号として作成する */
   importIssue: (pkg: LayoutPackage) => Promise<Issue | null>;
+
+  // アタック原稿（営業の仮提案原稿）
+  addAttack: (input: {
+    mediaId: MediaId;
+    size: string;
+  }) => Promise<AttackManuscript | null>;
+  updateAttack: (id: string, patch: Partial<AttackManuscript>) => Promise<void>;
+  deleteAttack: (id: string) => Promise<void>;
 
   // 原稿
   addManuscript: (input: {
@@ -435,6 +444,49 @@ export const useStore = create<StoreState>((set, get) => ({
       updatedAt: now,
     });
     return ok ? issue : null;
+  },
+
+  addAttack: async (input) => {
+    const now = new Date().toISOString();
+    const db = get().db;
+    const attack: AttackManuscript = {
+      id: uid(),
+      media_id: input.mediaId,
+      size: input.size,
+      title: null,
+      content: {},
+      free_text: null,
+      photos: [],
+      created_at: now,
+      updated_at: now,
+    };
+    const ok = await get().commit({
+      ...db,
+      attacks: [attack, ...db.attacks],
+      updatedAt: now,
+    });
+    return ok ? attack : null;
+  },
+
+  updateAttack: async (id, patch) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    await get().commit({
+      ...db,
+      attacks: db.attacks.map((a) =>
+        a.id === id ? { ...a, ...patch, updated_at: now } : a,
+      ),
+      updatedAt: now,
+    });
+  },
+
+  deleteAttack: async (id) => {
+    const db = get().db;
+    await get().commit({
+      ...db,
+      attacks: db.attacks.filter((a) => a.id !== id),
+      updatedAt: new Date().toISOString(),
+    });
   },
 
   placeSlot: async (slotId, toPage, col, row) => {

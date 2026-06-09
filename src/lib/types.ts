@@ -95,3 +95,22 @@ export interface ManuscriptImage {
   sort_order: number;
   created_at: string;
 }
+
+/**
+ * アタック原稿（営業がクライアントに見せる仮提案原稿）。
+ * 号には紐づかない媒体ごとの単独データ。写真は縮小したdataURLをそのまま保持。
+ */
+export interface AttackManuscript {
+  id: string;
+  media_id: string;
+  size: string;
+  title: string | null;
+  /** 左の要項/各項目の値（key=フィールドkey） */
+  content: Record<string, string>;
+  /** DOMOぱど等の右フリー欄テキスト（AI生成・手編集可） */
+  free_text: string | null;
+  /** 仮写真（縮小済みdataURL） */
+  photos: string[];
+  created_at: string;
+  updated_at: string;
+}

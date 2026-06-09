@@ -28,11 +28,11 @@ export default function AttackEditorPage({
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
       <Link
-        href={`/${media.id}`}
+        href={`/${media.id}/attack`}
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" />
-        {media.name} へ戻る
+        アタック原稿一覧へ戻る
       </Link>
 
       <div className={`mb-6 rounded-xl bg-linear-to-br ${style.gradient} p-6 text-white`}>

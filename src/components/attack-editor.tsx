@@ -108,7 +108,7 @@ export function AttackEditor({
     startTransition(async () => {
       await deleteAttack(attack.id);
       toast.success("削除しました");
-      router.push(`/${media.id}`);
+      router.push(`/${media.id}/attack`);
     });
   }
 
@@ -122,11 +122,27 @@ export function AttackEditor({
       try {
         const text = await generateAttackFreeText(key, {
           mediaName: media.name,
-          requirements: format.fields.map((f) => ({
-            label: f.label,
-            value: content[f.key] ?? "",
-          })),
-          maxLength: format.freeMaxLength ?? 220,
+          requirements: format.fields
+            // QR画像(dataURL)はAIに渡さない。バッジは選択ラベルへ変換。
+            .filter((f) => f.type !== "qr")
+            .map((f) => {
+              const raw = content[f.key] ?? "";
+              if (f.type === "badges") {
+                const labels = raw
+                  .split(",")
+                  .map((v) => f.options?.find((o) => o.value === v)?.label ?? "")
+                  .filter(Boolean)
+                  .join("・");
+                return { label: f.label, value: labels };
+              }
+              if (f.type === "select") {
+                const label =
+                  f.options?.find((o) => o.value === raw)?.label ?? raw;
+                return { label: f.label, value: label };
+              }
+              return { label: f.label, value: raw };
+            }),
+          maxLength: format.freeMaxLength ?? 60,
         });
         if (!text) {
           toast.error("生成結果が空でした。要項を埋めてお試しください");
@@ -187,7 +203,7 @@ export function AttackEditor({
       {/* 要項/項目 */}
       <Card className="p-5">
         <h3 className="mb-4 font-semibold">
-          {format.hasFreeArea ? "募集要項" : "原稿項目"}
+          {format.hasFreeArea ? "広告内容（求人広告の見方に準拠）" : "原稿項目"}
         </h3>
         <div className="space-y-4">
           {format.fields.map((f) => {
@@ -199,7 +215,7 @@ export function AttackEditor({
                     {f.label}
                     {f.required && <span className="ml-1 text-destructive">*</span>}
                   </Label>
-                  {f.maxLength && (
+                  {f.maxLength && f.type !== "qr" && f.type !== "badges" && (
                     <span
                       className={`text-xs tabular-nums ${val.length > f.maxLength ? "text-destructive" : "text-muted-foreground"}`}
                     >
@@ -207,7 +223,33 @@ export function AttackEditor({
                     </span>
                   )}
                 </div>
-                {f.type === "textarea" ? (
+                {f.hint && (
+                  <p className="mb-1 text-xs text-muted-foreground">{f.hint}</p>
+                )}
+
+                {f.type === "select" ? (
+                  <select
+                    id={f.key}
+                    value={val}
+                    onChange={(e) => setField(f.key, e.target.value)}
+                    className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  >
+                    <option value="">選択してください</option>
+                    {f.options?.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.mark ? `${o.mark}｜${o.label}` : o.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : f.type === "badges" ? (
+                  <BadgePicker
+                    options={f.options ?? []}
+                    value={val}
+                    onChange={(v) => setField(f.key, v)}
+                  />
+                ) : f.type === "qr" ? (
+                  <QrPicker value={val} onChange={(v) => setField(f.key, v)} />
+                ) : f.type === "textarea" ? (
                   <textarea
                     id={f.key}
                     value={val}
@@ -327,7 +369,7 @@ export function AttackEditor({
           <Trash2 className="h-4 w-4" />
           削除
         </Button>
-        <Button variant="outline" onClick={() => router.push(`/${media.id}`)}>
+        <Button variant="outline" onClick={() => router.push(`/${media.id}/attack`)}>
           一覧へ戻る
         </Button>
         <Button variant="outline" onClick={() => save(true)} disabled={pending}>
@@ -339,6 +381,107 @@ export function AttackEditor({
           保存
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** ❸PRマーク: 複数選択（カンマ区切りvalueで保存） */
+function BadgePicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: string; label: string; mark?: string }[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const selected = value ? value.split(",").filter(Boolean) : [];
+  function toggle(v: string) {
+    const next = selected.includes(v)
+      ? selected.filter((x) => x !== v)
+      : [...selected, v];
+    // options 順を維持
+    const ordered = options.map((o) => o.value).filter((x) => next.includes(x));
+    onChange(ordered.join(","));
+  }
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = selected.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => toggle(o.value)}
+            className={`rounded-md border px-2 py-1 text-xs transition-colors ${
+              on
+                ? "border-orange-500 bg-orange-500 text-white"
+                : "border-input bg-transparent hover:bg-muted"
+            }`}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** ❺QRコード: 画像を1枚アップロード（dataURL保存）。未設定なら出力で空枠表示。 */
+function QrPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  function read(files: FileList | null) {
+    const f = files?.[0];
+    if (!f || !f.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange(String(reader.result));
+    reader.readAsDataURL(f);
+  }
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => ref.current?.click()}
+        className="flex h-20 w-20 shrink-0 items-center justify-center rounded-md border-2 border-dashed border-input text-xs text-muted-foreground hover:bg-muted"
+      >
+        {value ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={value} alt="QR" className="h-full w-full object-contain" />
+        ) : (
+          "QR枠"
+        )}
+      </button>
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+        >
+          {value ? "差し替え" : "QR画像を選択"}
+        </button>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="rounded-md px-2 py-1 text-xs text-destructive hover:bg-muted"
+          >
+            削除（空枠にする）
+          </button>
+        )}
+      </div>
+      <input
+        ref={ref}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => read(e.target.files)}
+      />
     </div>
   );
 }

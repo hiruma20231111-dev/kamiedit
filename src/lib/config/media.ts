@@ -36,15 +36,25 @@ export const CATEGORY_LABELS: Record<ManuscriptCategory, string> = {
   other: "その他企画",
 };
 
+export interface FieldOption {
+  value: string;
+  label: string;
+  /** 誌面のマーク表示用の短い文字（例: ア, 高, 交） */
+  mark?: string;
+}
+
 export interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea";
+  /** select=単一選択, badges=複数選択(カンマ区切り保存), qr=QR画像 */
+  type: "text" | "textarea" | "select" | "badges" | "qr";
   /** 文字数上限。未設定なら無制限 */
   maxLength?: number;
   required?: boolean;
   /** 入力補助の注記 */
   hint?: string;
+  /** select / badges の選択肢 */
+  options?: FieldOption[];
 }
 
 export interface SizeVariant {

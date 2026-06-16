@@ -5,6 +5,9 @@
  */
 export const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
 
+/** Google Picker 用の APIキー（ブラウザキー）。受注シートの選択に使用 */
+export const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY ?? "";
+
 /** openid/email/profile + アプリが作成した Drive ファイルのみアクセス可能な drive.file */
 export const SCOPES =
   "openid email profile https://www.googleapis.com/auth/drive.file";

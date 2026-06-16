@@ -150,6 +150,8 @@ interface StoreState {
   deleteImage: (imageId: string) => Promise<void>;
 
   // 受注インボックス（共有スプレッドシート）
+  /** Picker で選んだフォーム回答シートを受注インボックスに設定（状態列の見出しも用意） */
+  setOrderSheet: (id: string) => Promise<boolean>;
   /** 受注シートを用意（無ければ作成しヘッダーを書く）。spreadsheetId を返す */
   ensureOrderSheet: () => Promise<string | null>;
   /** 受注シートを読み、受注行へパースして返す */
@@ -341,6 +343,27 @@ export const useStore = create<StoreState>((set, get) => ({
       dbFileId: null,
       db: emptyDb(),
     });
+  },
+
+  setOrderSheet: async (id) => {
+    const token = await get().ensureToken();
+    if (!token) {
+      set({ error: "サインインが必要です" });
+      return false;
+    }
+    try {
+      // フォーム回答シートに、アプリが使う「状態」「取込メモ」の見出しを用意（ベストエフォート）
+      await updateValues(token, id, "R1:S1", [["状態", "取込メモ"]]);
+    } catch {
+      // 書き込めなくても致命的でない（取込時の状態更新で再試行される）
+    }
+    const db = get().db;
+    const ok = await get().commit({
+      ...db,
+      orderSheetId: id,
+      updatedAt: new Date().toISOString(),
+    });
+    return ok;
   },
 
   ensureOrderSheet: async () => {

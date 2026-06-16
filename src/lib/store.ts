@@ -133,6 +133,10 @@ interface StoreState {
 
   /** 有効なトークンを返す（失効間際なら無UIで再取得）。取得不可なら null */
   ensureToken: () => Promise<string | null>;
+  /** 失効2分前に無UIでトークンを更新するタイマーを（再）設定する */
+  scheduleRefresh: () => void;
+  /** 無UIでトークンを更新する（タイマー/復帰用・内部利用） */
+  _refreshToken: () => Promise<void>;
   /** db を更新して Drive へ保存（失敗時ロールバック） */
   commit: (next: DriveDB) => Promise<boolean>;
 }
@@ -178,6 +182,15 @@ function clearSession() {
   window.localStorage.removeItem(SESSION_KEY);
 }
 
+// 失効前に無UIでトークンを更新するためのタイマー（タブを開いている間ログインを維持する）
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+function clearRefreshTimer() {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
 /** 付与スコープに drive.file が含まれるか（同意画面でDrive許可を外すと欠ける） */
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 function hasDriveScope(grantedScopes: string): boolean {
@@ -219,6 +232,7 @@ export const useStore = create<StoreState>((set, get) => ({
         user: saved.user,
         signedIn: true,
       });
+      get().scheduleRefresh();
       await get().reload();
       return;
     }
@@ -234,9 +248,14 @@ export const useStore = create<StoreState>((set, get) => ({
       const expiresAt = Date.now() + expiresIn * 1000;
       saveSession({ token, expiresAt, user });
       set({ token, expiresAt, user, signedIn: true, driveDenied: !hasDriveScope(grantedScopes) });
+      get().scheduleRefresh();
       await get().reload();
     } catch {
-      clearSession();
+      // 一時的な失敗（3rd-party Cookie制限など）で即ログアウトしない。
+      // 記録上のユーザーを保持したままログイン状態を維持し、後でトークン再取得を試みる。
+      set({ user: saved.user, signedIn: true });
+      clearRefreshTimer();
+      refreshTimer = setTimeout(() => void get()._refreshToken(), 60_000);
     }
   },
 
@@ -259,6 +278,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const driveDenied = !hasDriveScope(grantedScopes);
       saveSession({ token, expiresAt, user });
       set({ token, expiresAt, user, signedIn: true, driveDenied });
+      get().scheduleRefresh();
       if (driveDenied) {
         // Drive 許可が無いと保存・割付の取り込みが全て失敗する
         set({
@@ -276,6 +296,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   signOut: () => {
+    clearRefreshTimer();
     const token = get().token;
     if (token) revokeToken(token);
     clearSession();
@@ -303,9 +324,43 @@ export const useStore = create<StoreState>((set, get) => ({
       const newExpiry = Date.now() + res.expiresIn * 1000;
       saveSession({ token: res.token, expiresAt: newExpiry, user });
       set({ token: res.token, expiresAt: newExpiry });
+      get().scheduleRefresh();
       return res.token;
     } catch {
       return token; // 取れなければ既存トークンで試す
+    }
+  },
+
+  scheduleRefresh: () => {
+    clearRefreshTimer();
+    if (typeof window === "undefined") return;
+    const expiresAt = get().expiresAt;
+    if (!expiresAt) return;
+    // 失効2分前に無UIで更新（最短10秒）。タブを開いている限りログインが切れない
+    const delay = Math.max(10_000, expiresAt - Date.now() - 120_000);
+    refreshTimer = setTimeout(() => void get()._refreshToken(), delay);
+  },
+
+  _refreshToken: async () => {
+    const user = get().user;
+    if (!hasGoogleEnv() || !user) return;
+    try {
+      const res = await getAccessToken(GOOGLE_CLIENT_ID, SCOPES, "");
+      const expiresAt = Date.now() + res.expiresIn * 1000;
+      saveSession({ token: res.token, expiresAt, user });
+      set({
+        token: res.token,
+        expiresAt,
+        signedIn: true,
+        driveDenied: !hasDriveScope(res.grantedScopes),
+      });
+      // 初回復元に失敗してまだ未読込なら、このタイミングでDriveを読む
+      if (!get().dbFileId && !get().driveDenied) await get().reload();
+      get().scheduleRefresh();
+    } catch {
+      // 更新に失敗してもログアウトはしない。5分後に再試行する
+      clearRefreshTimer();
+      refreshTimer = setTimeout(() => void get()._refreshToken(), 5 * 60_000);
     }
   },
 

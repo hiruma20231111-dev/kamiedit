@@ -38,6 +38,8 @@ export interface Issue {
   id: string;
   media_id: string;
   name: string;
+  /** エリア版（発行媒体）ID。まみたん等のエリア版を持つ媒体で使用。未設定可（後方互換） */
+  area?: string | null;
   year: number | null;
   month: number | null;
   page_count: number | null;

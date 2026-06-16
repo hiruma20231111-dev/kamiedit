@@ -62,6 +62,7 @@ interface StoreState {
   addIssue: (input: {
     mediaId: MediaId;
     name: string;
+    area?: string | null;
     year?: number | null;
     month?: number | null;
     pageCount?: number | null;
@@ -73,6 +74,7 @@ interface StoreState {
     input: {
       mediaId: MediaId;
       name: string;
+      area?: string | null;
       year?: number | null;
       month?: number | null;
       pageCount?: number | null;
@@ -403,6 +405,7 @@ export const useStore = create<StoreState>((set, get) => ({
       id: uid(),
       media_id: input.mediaId,
       name: input.name,
+      area: input.area ?? null,
       year: input.year ?? null,
       month: input.month ?? null,
       page_count: input.pageCount ?? null,
@@ -438,6 +441,7 @@ export const useStore = create<StoreState>((set, get) => ({
       id: uid(),
       media_id: input.mediaId,
       name: input.name,
+      area: input.area ?? null,
       year: input.year ?? null,
       month: input.month ?? null,
       page_count: input.pageCount ?? source?.page_count ?? null,

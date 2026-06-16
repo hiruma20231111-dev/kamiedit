@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/lib/store";
-import type { MediaId } from "@/lib/config/media";
+import type { AreaEdition, MediaId } from "@/lib/config/media";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,10 +15,12 @@ export function NewIssueForm({
   mediaId,
   hasLayout,
   pageOptions,
+  areas,
 }: {
   mediaId: MediaId;
   hasLayout: boolean;
   pageOptions?: number[];
+  areas?: AreaEdition[];
 }) {
   const router = useRouter();
   const addIssue = useStore((s) => s.addIssue);
@@ -28,14 +30,19 @@ export function NewIssueForm({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  const hasAreas = !!areas && areas.length > 0;
   const now = new Date();
   const [name, setName] = useState("");
+  const [areaId, setAreaId] = useState(areas?.[0]?.id ?? "");
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [pageCount, setPageCount] = useState(pageOptions?.[0] ?? 16);
   // 流用モード
   const [reuse, setReuse] = useState(false);
   const [sourceId, setSourceId] = useState("");
+
+  const areaName = areas?.find((a) => a.id === areaId)?.name ?? "";
+  const defaultName = `${year}年${month}月号${areaName ? `（${areaName}）` : ""}`;
 
   // 同じ媒体の既存の号（流用元の候補）
   const issues = allIssues.filter((i) => i.media_id === mediaId);
@@ -46,6 +53,10 @@ export function NewIssueForm({
     : 0;
 
   function submit() {
+    if (hasAreas && !areaId) {
+      toast.error("エリア版を選択してください");
+      return;
+    }
     startTransition(async () => {
       let issue;
       if (reuse) {
@@ -55,14 +66,16 @@ export function NewIssueForm({
         }
         issue = await duplicateIssue(sourceId, {
           mediaId,
-          name: name.trim() || `${year}年${month}月号`,
+          name: name.trim() || defaultName,
+          area: hasAreas ? areaId : null,
           year,
           month,
         });
       } else {
         issue = await addIssue({
           mediaId,
-          name: name.trim() || `${year}年${month}月号`,
+          name: name.trim() || defaultName,
+          area: hasAreas ? areaId : null,
           year,
           month,
           pageCount: hasLayout ? pageCount : null,
@@ -152,6 +165,27 @@ export function NewIssueForm({
           </div>
         )}
 
+        {hasAreas && (
+          <div>
+            <Label htmlFor="area">エリア版</Label>
+            <select
+              id="area"
+              value={areaId}
+              onChange={(e) => setAreaId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              {areas!.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              同じ発行号でもエリア版ごとに別の割付になります。
+            </p>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label htmlFor="year">年</Label>
@@ -179,7 +213,7 @@ export function NewIssueForm({
           <Label htmlFor="name">号数名（任意）</Label>
           <Input
             id="name"
-            placeholder={`${year}年${month}月号`}
+            placeholder={defaultName}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />

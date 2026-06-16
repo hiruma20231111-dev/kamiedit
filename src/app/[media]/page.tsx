@@ -28,6 +28,8 @@ export default function MediaPage({
   // 安定参照(db.issues)を取得してから描画側で絞り込む。
   const allIssues = useStore((s) => s.db.issues);
   const issues = allIssues.filter((i) => i.media_id === media.id);
+  const areaName = (id?: string | null) =>
+    media.areas?.find((a) => a.id === id)?.name ?? null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
@@ -61,6 +63,7 @@ export default function MediaPage({
               mediaId={media.id}
               hasLayout={media.hasLayout}
               pageOptions={media.pageOptions}
+              areas={media.areas}
             />
           </div>
         )}
@@ -96,7 +99,16 @@ export default function MediaPage({
                 className="flex min-w-0 flex-1 items-center justify-between gap-2"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-semibold">{issue.name}</p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {areaName(issue.area) && (
+                      <span
+                        className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${style.softBg} ${style.text}`}
+                      >
+                        {areaName(issue.area)}
+                      </span>
+                    )}
+                    <p className="truncate font-semibold">{issue.name}</p>
+                  </div>
                   {media.hasLayout && issue.page_count && (
                     <p className="text-xs text-muted-foreground">
                       {issue.page_count}ページ構成

@@ -36,6 +36,27 @@ export const CATEGORY_LABELS: Record<ManuscriptCategory, string> = {
   other: "その他企画",
 };
 
+/** エリア版（発行媒体）。号は「エリア版 × 発行号」で一意になる */
+export interface AreaEdition {
+  id: string;
+  name: string;
+}
+
+/**
+ * まみたんのエリア版（8発行媒体）。受注がどの割付に入るかは
+ * 「エリア版 × 発行号(年・月)」で決まる。
+ */
+export const MAMITAN_AREAS: AreaEdition[] = [
+  { id: "osaka_city", name: "大阪市版" },
+  { id: "keihan", name: "京阪版" },
+  { id: "hokusetsu", name: "北摂版" },
+  { id: "osaka_east", name: "大阪東版" },
+  { id: "hanshin", name: "阪神版" },
+  { id: "minami_osaka", name: "南大阪版" },
+  { id: "wakayama", name: "和歌山版" },
+  { id: "kyoto", name: "京都版" },
+];
+
 export interface FieldOption {
   value: string;
   label: string;
@@ -80,6 +101,8 @@ export interface MediaConfig {
   /** TOPカードの表紙イメージ画像パス（public配下）。無ければグラデーション表示 */
   cover?: string;
   pageOptions?: number[];
+  /** エリア版（発行媒体）。設定された媒体は号作成時にエリア版を選ぶ */
+  areas?: AreaEdition[];
   sizes: SizeFormat[];
 }
 
@@ -223,6 +246,7 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     hasLayout: true,
     cover: "/covers/mamitan.jpg",
     pageOptions: [16, 24, 32, 40],
+    areas: MAMITAN_AREAS,
     sizes: layoutSizes,
   },
 

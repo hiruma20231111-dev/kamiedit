@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LoginButton, UserMenu } from "@/components/auth-buttons";
 import { Badge } from "@/components/ui/badge";
-import { Settings } from "lucide-react";
+import { Settings, Inbox } from "lucide-react";
 
 export function SiteHeader() {
   const configured = useStore((s) => s.configured);
@@ -46,6 +46,16 @@ export function SiteHeader() {
             <Badge variant="secondary" className="hidden sm:inline-flex">
               {saving ? "保存中…" : loading ? "読込中…" : "Drive同期"}
             </Badge>
+          )}
+          {signedIn && (
+            <Link
+              href="/orders"
+              aria-label="受注インボックス"
+              title="受注インボックス"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Inbox className="h-5 w-5" />
+            </Link>
           )}
           <Link
             href="/profile"

@@ -18,6 +18,8 @@ export interface DriveDB {
   slots: LayoutSlot[];
   images: ManuscriptImage[];
   attacks: AttackManuscript[];
+  /** 受注インボックス用スプレッドシートの spreadsheetId（アプリが作成） */
+  orderSheetId?: string | null;
   updatedAt: string;
 }
 
@@ -29,6 +31,7 @@ export function emptyDb(): DriveDB {
     slots: [],
     images: [],
     attacks: [],
+    orderSheetId: null,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -45,6 +48,7 @@ export function normalizeDb(raw: unknown): DriveDB {
     slots: Array.isArray(r.slots) ? r.slots : [],
     images: Array.isArray(r.images) ? r.images : [],
     attacks: Array.isArray(r.attacks) ? r.attacks : [],
+    orderSheetId: typeof r.orderSheetId === "string" ? r.orderSheetId : null,
     updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : base.updatedAt,
   };
 }

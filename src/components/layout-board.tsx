@@ -221,6 +221,8 @@ export function LayoutBoard({
             const kindLabel =
               slot.kind && slot.kind !== "ad" ? KIND_LABELS[slot.kind] : null;
             const dragging = dragId === slot.id;
+            // 縦1マスの枠（1/8・1/4Y）は高さが足りず2段が入らないので文字を小さく詰める
+            const compact = rowSpan === 1;
             const cellKey = `${page}:${col}:${row}`;
             const isDropTarget = !!dragId && !dragging && overCell === cellKey;
             return (
@@ -247,20 +249,23 @@ export function LayoutBoard({
                   zIndex: dragging ? 30 : 10,
                   touchAction: signedIn ? "none" : undefined,
                 }}
-                className={`flex flex-col justify-between overflow-hidden rounded-md border-2 p-1.5 text-left text-xs transition-all ${toneClass} ${
+                className={`flex flex-col justify-between overflow-hidden rounded-md border-2 text-left text-xs transition-all ${compact ? "p-1" : "p-1.5"} ${toneClass} ${
                   signedIn ? "cursor-grab hover:shadow-md active:cursor-grabbing" : "cursor-default"
                 } ${
                   dragging ? "opacity-40" : ""
                 } ${isDropTarget ? "ring-2 ring-primary ring-offset-1" : ""}`}
               >
-                <div className="flex items-center justify-between gap-1">
+                <div className="flex min-h-0 items-center justify-between gap-1 overflow-hidden">
                   <div className="flex min-w-0 items-center gap-1">
-                    <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+                    <Badge
+                      variant="secondary"
+                      className={`py-0 ${compact ? "px-0.5 text-[8px]" : "px-1 text-[10px]"}`}
+                    >
                       {slot.size}
                     </Badge>
                     {kindLabel && (
                       <span
-                        className={`rounded px-1 text-[9px] font-semibold ${style.softBg} ${style.text}`}
+                        className={`rounded px-1 font-semibold ${compact ? "text-[8px]" : "text-[9px]"} ${style.softBg} ${style.text}`}
                       >
                         {kindLabel}
                       </span>
@@ -272,7 +277,9 @@ export function LayoutBoard({
                     <FileText className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
                   ) : null}
                 </div>
-                <div className="truncate font-medium leading-tight">
+                <div
+                  className={`shrink-0 truncate font-medium ${compact ? "text-[10px] leading-tight" : "leading-tight"}`}
+                >
                   {slot.display_name || slot.company_name || "（未入力）"}
                 </div>
               </button>

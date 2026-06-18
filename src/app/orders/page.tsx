@@ -185,6 +185,36 @@ export default function OrdersPage() {
             )}
           </div>
 
+          {/* 各版の未取込件数（タブの下に一覧表示・クリックで絞り込み） */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {groups.map((g) => {
+              const has = g.pending.length > 0;
+              return (
+                <button
+                  key={g.area.id}
+                  type="button"
+                  onClick={() => setAreaFilter(g.area.id)}
+                  className={`flex items-center justify-between rounded-xl border px-3 py-2 text-sm transition-colors ${
+                    has
+                      ? "border-orange-300 bg-orange-50 hover:bg-orange-100 dark:border-orange-500/40 dark:bg-orange-950/20 dark:hover:bg-orange-950/40"
+                      : "hover:bg-muted"
+                  } ${areaFilter === g.area.id ? "ring-2 ring-orange-400" : ""}`}
+                >
+                  <span className="truncate font-medium">{g.area.name}</span>
+                  <span
+                    className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
+                      has
+                        ? "bg-orange-500 text-white"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {g.pending.length}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           {visibleGroups.length === 0 ? (
             <Card className="p-8 text-center text-sm text-muted-foreground">
               {loading ? "読み込み中…" : "対象の受注はありません。"}

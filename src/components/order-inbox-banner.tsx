@@ -46,13 +46,14 @@ export function OrderInboxBanner() {
   return (
     <Link
       href="/orders"
-      className="group relative mb-10 block overflow-hidden rounded-2xl border border-primary/20 bg-linear-to-r from-primary via-violet-600 to-indigo-600 p-6 text-white shadow-md transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/25 sm:p-7"
+      className="group relative mb-10 block overflow-hidden rounded-2xl border border-orange-300/40 bg-linear-to-r from-amber-400 via-orange-500 to-rose-500 p-6 text-white shadow-lg shadow-orange-500/20 transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-orange-500/40 sm:p-8"
     >
-      {/* 装飾の光のにじみ */}
-      <div className="pointer-events-none absolute -top-10 -right-8 h-48 w-48 rounded-full bg-white/10 blur-2xl transition-transform duration-500 group-hover:scale-125" />
-      <div className="pointer-events-none absolute bottom-0 right-28 h-24 w-24 rounded-full bg-white/10 blur-xl" />
+      {/* 装飾の光のにじみ（暖色） */}
+      <div className="pointer-events-none absolute -top-12 -right-10 h-52 w-52 rounded-full bg-yellow-200/30 blur-3xl transition-transform duration-500 group-hover:scale-125" />
+      <div className="pointer-events-none absolute -bottom-8 right-24 h-32 w-32 rounded-full bg-rose-300/30 blur-2xl" />
+      <div className="pointer-events-none absolute -bottom-6 left-10 h-24 w-24 rounded-full bg-amber-200/20 blur-2xl" />
       {/* ホバーで横切るシャイン */}
-      <div className="pointer-events-none absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
+      <div className="pointer-events-none absolute inset-0 -translate-x-full bg-linear-to-r from-transparent via-white/35 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full" />
 
       <div className="relative flex items-center gap-4 sm:gap-5">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 backdrop-blur transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 sm:h-16 sm:w-16">

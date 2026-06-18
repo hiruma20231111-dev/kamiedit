@@ -17,12 +17,32 @@ export default function ProfilePage() {
   const signedIn = useStore((s) => s.signedIn);
   const orderSheetId = useStore((s) => s.db.orderSheetId);
   const ensureOrderSheet = useStore((s) => s.ensureOrderSheet);
+  const setOrderSheet = useStore((s) => s.setOrderSheet);
   const [key, setKey] = useState("");
   const [show, setShow] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [manualId, setManualId] = useState("");
+  const [savingId, setSavingId] = useState(false);
+
+  async function applyManualId() {
+    const id = manualId.trim();
+    if (!id) return;
+    setSavingId(true);
+    try {
+      const ok = await setOrderSheet(id);
+      if (ok) {
+        toast.success("受注シートIDを設定しました");
+        setManualId("");
+      } else {
+        toast.error("設定に失敗しました");
+      }
+    } finally {
+      setSavingId(false);
+    }
+  }
 
   useEffect(() => {
     setKey(getGeminiKey());
@@ -195,6 +215,32 @@ export default function ProfilePage() {
               受注シートを開く
               <ExternalLink className="h-3.5 w-3.5" />
             </a>
+          </div>
+        )}
+
+        {signedIn && (
+          <div className="mt-4 border-t pt-4">
+            <p className="mb-1 text-sm font-medium">シートIDを手動で設定</p>
+            <p className="mb-2 text-xs text-muted-foreground">
+              別アカウントでログインした等でIDがずれた場合に、
+              <strong>元の受注シートIDを貼り直す</strong>ためのものです。
+              （IDは作成時に自動で変わったりはしません）
+            </p>
+            <div className="flex gap-2">
+              <Input
+                value={manualId}
+                onChange={(e) => setManualId(e.target.value)}
+                placeholder="スプレッドシートID"
+                className="flex-1"
+              />
+              <Button
+                variant="outline"
+                onClick={() => void applyManualId()}
+                disabled={savingId || !manualId.trim()}
+              >
+                {savingId ? "設定中…" : "設定"}
+              </Button>
+            </div>
           </div>
         )}
       </Card>

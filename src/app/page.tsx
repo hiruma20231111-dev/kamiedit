@@ -2,9 +2,10 @@
 
 import { MEDIA_LIST } from "@/lib/config/media";
 import { useStore } from "@/lib/store";
+import Link from "next/link";
 import { MediaCard } from "@/components/media-card";
 import { OrderInboxBanner } from "@/components/order-inbox-banner";
-import { Sparkles, TriangleAlert, Eye } from "lucide-react";
+import { Sparkles, TriangleAlert, Eye, BarChart3, ArrowRight } from "lucide-react";
 
 export default function Home() {
   const configured = useStore((s) => s.configured);
@@ -54,6 +55,23 @@ export default function Home() {
 
         {/* 使用頻度の高い受注インボックスへの大きな導線（全媒体タブの上） */}
         <OrderInboxBanner />
+
+        {/* 売上・進捗ダッシュボードへの導線 */}
+        <Link
+          href="/dashboard"
+          className="group mb-10 flex items-center gap-3 rounded-xl border bg-card p-4 transition-colors hover:bg-muted"
+        >
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600 dark:bg-orange-950/40">
+            <BarChart3 className="h-5 w-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">売上・進捗ダッシュボード</p>
+            <p className="text-sm text-muted-foreground">
+              号ごとの売上・企画・台割の埋まり具合を自動集計
+            </p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1" />
+        </Link>
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {MEDIA_LIST.map((media) => (

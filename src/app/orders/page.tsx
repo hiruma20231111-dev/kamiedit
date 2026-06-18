@@ -46,9 +46,22 @@ export default function OrdersPage() {
   );
 
   // エリア版ごとに受注を仕分け（全8版を常に保持。タブは常時表示）
+  // 取込済の受注は「発行月の翌月」になったら一覧から除外（割付データは残す）。
+  // 未取込は期限が過ぎても見落とし防止のため残す。
   const groups = useMemo(() => {
+    const now = new Date();
+    const ny = now.getFullYear();
+    const nm = now.getMonth() + 1;
+    const isExpired = (o: OrderRow) =>
+      o.year != null &&
+      o.month != null &&
+      (ny > o.year || (ny === o.year && nm > o.month));
     return MAMITAN_AREAS.map((area) => {
-      const list = orders.filter((o) => o.areaIds.includes(area.id));
+      const list = orders.filter(
+        (o) =>
+          o.areaIds.includes(area.id) &&
+          !(isTaken(o, area.id) && isExpired(o)),
+      );
       const pending = list.filter((o) => !isTaken(o, area.id));
       const done = list.filter((o) => isTaken(o, area.id));
       return { area, list, pending, done };

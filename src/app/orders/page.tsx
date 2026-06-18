@@ -40,7 +40,8 @@ export default function OrdersPage() {
 
   const isTaken = useCallback(
     (o: OrderRow, areaId: string) =>
-      orderTakes.some((t) => t.key === orderKey(o) && t.areaId === areaId),
+      // 旧方式でシートに「取込済」が付いた受注も取込済み扱い（二重取込防止）
+      o.taken || orderTakes.some((t) => t.key === orderKey(o) && t.areaId === areaId),
     [orderTakes],
   );
 

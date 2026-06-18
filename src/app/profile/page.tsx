@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getGeminiKey, setGeminiKey } from "@/lib/profile";
 import { GEMINI_MODEL } from "@/lib/gemini";
 import { useStore } from "@/lib/store";
+import { MEDIA, ORDER_MEDIA, type MediaId } from "@/lib/config/media";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,63 +16,15 @@ import { toast } from "sonner";
 export default function ProfilePage() {
   const user = useStore((s) => s.user);
   const signedIn = useStore((s) => s.signedIn);
-  const orderSheetId = useStore((s) => s.db.orderSheetId);
-  const ensureOrderSheet = useStore((s) => s.ensureOrderSheet);
-  const setOrderSheet = useStore((s) => s.setOrderSheet);
   const [key, setKey] = useState("");
   const [show, setShow] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [creating, setCreating] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [manualId, setManualId] = useState("");
-  const [savingId, setSavingId] = useState(false);
-
-  async function applyManualId() {
-    const id = manualId.trim();
-    if (!id) return;
-    setSavingId(true);
-    try {
-      const ok = await setOrderSheet(id);
-      if (ok) {
-        toast.success("受注シートIDを設定しました");
-        setManualId("");
-      } else {
-        toast.error("設定に失敗しました");
-      }
-    } finally {
-      setSavingId(false);
-    }
-  }
 
   useEffect(() => {
     setKey(getGeminiKey());
     setLoaded(true);
   }, []);
-
-  async function createOrderSheet() {
-    setCreating(true);
-    try {
-      const id = await ensureOrderSheet();
-      if (id) toast.success("受注シートを作成しました");
-      else toast.error("受注シートの作成に失敗しました");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "受注シートの作成に失敗しました");
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  async function copySheetId() {
-    if (!orderSheetId) return;
-    try {
-      await navigator.clipboard.writeText(orderSheetId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      toast.error("コピーに失敗しました");
-    }
-  }
 
   function save() {
     setGeminiKey(key.trim());
@@ -174,76 +127,135 @@ export default function ProfilePage() {
           <h2 className="font-semibold">受注インボックス設定</h2>
         </div>
         <p className="mb-4 text-sm text-muted-foreground">
-          営業からの受注を受け取るシートです。<strong>最初に1回だけ</strong>作成し、
-          表示されるシートIDを受注フォーム作成スクリプトに貼り付ければ設定完了。
-          以降は受注が自動でアプリに届きます（受注の確認・取込は
+          媒体ごとに、営業からの受注を受け取るシートを<strong>最初に1回だけ</strong>作成します。
+          表示されるシートIDを各媒体の受注フォーム作成スクリプトに貼り付ければ設定完了。
+          受注の確認・取込は
           <Link href="/orders" className="text-primary hover:underline">受注インボックス</Link>
-          から）。
+          から。
         </p>
 
         {!signedIn ? (
           <p className="text-sm text-muted-foreground">
             設定には右上から Google ログインしてください。
           </p>
-        ) : !orderSheetId ? (
-          <Button onClick={() => void createOrderSheet()} disabled={creating}>
-            <FileSpreadsheet className="h-4 w-4" />
-            {creating ? "作成中…" : "受注シートを作成"}
-          </Button>
         ) : (
-          <div className="space-y-3">
-            <div className="rounded-md border bg-muted/40 p-3">
-              <p className="mb-1 text-sm font-medium">
-                シートID（受注フォーム作成スクリプトの APP_SHEET_ID に貼り付け）
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 truncate rounded bg-background px-2 py-1 text-xs">
-                  {orderSheetId}
-                </code>
-                <Button variant="outline" size="sm" onClick={() => void copySheetId()}>
-                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  {copied ? "コピー済" : "コピー"}
-                </Button>
-              </div>
-            </div>
-            <a
-              href={`https://docs.google.com/spreadsheets/d/${orderSheetId}/edit`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-            >
-              受注シートを開く
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          </div>
-        )}
-
-        {signedIn && (
-          <div className="mt-4 border-t pt-4">
-            <p className="mb-1 text-sm font-medium">シートIDを手動で設定</p>
-            <p className="mb-2 text-xs text-muted-foreground">
-              別アカウントでログインした等でIDがずれた場合に、
-              <strong>元の受注シートIDを貼り直す</strong>ためのものです。
-              （IDは作成時に自動で変わったりはしません）
-            </p>
-            <div className="flex gap-2">
-              <Input
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value)}
-                placeholder="スプレッドシートID"
-                className="flex-1"
-              />
-              <Button
-                variant="outline"
-                onClick={() => void applyManualId()}
-                disabled={savingId || !manualId.trim()}
-              >
-                {savingId ? "設定中…" : "設定"}
-              </Button>
-            </div>
+          <div className="space-y-4">
+            {ORDER_MEDIA.map((m) => (
+              <OrderSheetSetup key={m.id} mediaId={m.id} />
+            ))}
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+/** 媒体1つぶんの受注シート設定（作成・IDコピー・手動設定） */
+function OrderSheetSetup({ mediaId }: { mediaId: MediaId }) {
+  const sheetId = useStore((s) => s.db.orderSheets?.[mediaId]);
+  const ensureOrderSheet = useStore((s) => s.ensureOrderSheet);
+  const setOrderSheet = useStore((s) => s.setOrderSheet);
+  const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [manualId, setManualId] = useState("");
+  const [savingId, setSavingId] = useState(false);
+
+  async function create() {
+    setCreating(true);
+    try {
+      const id = await ensureOrderSheet(mediaId);
+      if (id) toast.success(`${MEDIA[mediaId].name}の受注シートを作成しました`);
+      else toast.error("受注シートの作成に失敗しました");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "受注シートの作成に失敗しました");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function copyId() {
+    if (!sheetId) return;
+    try {
+      await navigator.clipboard.writeText(sheetId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("コピーに失敗しました");
+    }
+  }
+
+  async function applyManualId() {
+    const id = manualId.trim();
+    if (!id) return;
+    setSavingId(true);
+    try {
+      const ok = await setOrderSheet(mediaId, id);
+      if (ok) {
+        toast.success("受注シートIDを設定しました");
+        setManualId("");
+      } else {
+        toast.error("設定に失敗しました");
+      }
+    } finally {
+      setSavingId(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border p-4">
+      <p className="mb-2 font-semibold">{MEDIA[mediaId].name}</p>
+
+      {!sheetId ? (
+        <Button onClick={() => void create()} disabled={creating}>
+          <FileSpreadsheet className="h-4 w-4" />
+          {creating ? "作成中…" : "受注シートを作成"}
+        </Button>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">
+            シートID（受注フォーム作成スクリプトの APP_SHEET_ID に貼り付け）
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded bg-muted px-2 py-1 text-xs">
+              {sheetId}
+            </code>
+            <Button variant="outline" size="sm" onClick={() => void copyId()}>
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? "コピー済" : "コピー"}
+            </Button>
+          </div>
+          <a
+            href={`https://docs.google.com/spreadsheets/d/${sheetId}/edit`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+          >
+            受注シートを開く
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      )}
+
+      <div className="mt-3 border-t pt-3">
+        <p className="mb-1 text-xs text-muted-foreground">
+          別アカウントでログインした等でIDがずれた場合、元のシートIDを貼り直せます。
+        </p>
+        <div className="flex gap-2">
+          <Input
+            value={manualId}
+            onChange={(e) => setManualId(e.target.value)}
+            placeholder="スプレッドシートID"
+            className="flex-1"
+          />
+          <Button
+            variant="outline"
+            onClick={() => void applyManualId()}
+            disabled={savingId || !manualId.trim()}
+          >
+            {savingId ? "設定中…" : "設定"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

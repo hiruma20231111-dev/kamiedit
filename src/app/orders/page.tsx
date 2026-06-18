@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
-import { MAMITAN_AREAS } from "@/lib/config/media";
+import { MEDIA, ORDER_MEDIA, type MediaId } from "@/lib/config/media";
 import { isKnownSize, mapOrderSize, orderKey, type OrderRow } from "@/lib/orders";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,10 +13,15 @@ import { toast } from "sonner";
 
 export default function OrdersPage() {
   const signedIn = useStore((s) => s.signedIn);
-  const orderSheetId = useStore((s) => s.db.orderSheetId);
+  const orderSheets = useStore((s) => s.db.orderSheets ?? {});
   const orderTakes = useStore((s) => s.db.orderTakes ?? []);
   const fetchOrders = useStore((s) => s.fetchOrders);
   const importOrderArea = useStore((s) => s.importOrderArea);
+
+  // 媒体（受注インボックス対象）。既定は先頭（まみたん）
+  const [mediaId, setMediaId] = useState<MediaId>(ORDER_MEDIA[0].id);
+  const areas = MEDIA[mediaId].areas ?? [];
+  const orderSheetId = orderSheets[mediaId];
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,14 +31,19 @@ export default function OrdersPage() {
   const [areaFilter, setAreaFilter] = useState<string>("all");
 
   const refresh = useCallback(async () => {
-    if (!orderSheetId) return;
+    if (!orderSheetId) {
+      setOrders([]);
+      return;
+    }
     setLoading(true);
-    const rows = await fetchOrders();
+    const rows = await fetchOrders(mediaId);
     setLoading(false);
     if (rows) setOrders(rows);
-  }, [orderSheetId, fetchOrders]);
+  }, [orderSheetId, mediaId, fetchOrders]);
 
   useEffect(() => {
+    // 媒体切替時はフィルタを戻す
+    setAreaFilter("all");
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void refresh();
   }, [refresh]);
@@ -41,11 +51,14 @@ export default function OrdersPage() {
   const isTaken = useCallback(
     (o: OrderRow, areaId: string) =>
       // 旧方式でシートに「取込済」が付いた受注も取込済み扱い（二重取込防止）
-      o.taken || orderTakes.some((t) => t.key === orderKey(o) && t.areaId === areaId),
-    [orderTakes],
+      o.taken ||
+      orderTakes.some(
+        (t) => t.mediaId === mediaId && t.key === orderKey(o) && t.areaId === areaId,
+      ),
+    [orderTakes, mediaId],
   );
 
-  // エリア版ごとに受注を仕分け（全8版を常に保持。タブは常時表示）
+  // エリア版ごとに受注を仕分け（その媒体の全版を常に保持）。
   // 取込済の受注は「発行月の翌月」になったら一覧から除外（割付データは残す）。
   // 未取込は期限が過ぎても見落とし防止のため残す。
   const groups = useMemo(() => {
@@ -56,17 +69,16 @@ export default function OrdersPage() {
       o.year != null &&
       o.month != null &&
       (ny > o.year || (ny === o.year && nm > o.month));
-    return MAMITAN_AREAS.map((area) => {
+    return areas.map((area) => {
       const list = orders.filter(
         (o) =>
-          o.areaIds.includes(area.id) &&
-          !(isTaken(o, area.id) && isExpired(o)),
+          o.areaIds.includes(area.id) && !(isTaken(o, area.id) && isExpired(o)),
       );
       const pending = list.filter((o) => !isTaken(o, area.id));
       const done = list.filter((o) => isTaken(o, area.id));
       return { area, list, pending, done };
     });
-  }, [orders, isTaken]);
+  }, [orders, isTaken, areas]);
 
   // どの版にも振り分けられない受注（エリア版が未対応）
   const unrouted = useMemo(
@@ -74,7 +86,6 @@ export default function OrdersPage() {
     [orders],
   );
 
-  // 表示するセクション: 「すべて」は受注のある版のみ／個別選択時はその版（空でも表示）
   const visibleGroups =
     areaFilter === "all"
       ? groups.filter((g) => g.list.length > 0)
@@ -87,7 +98,7 @@ export default function OrdersPage() {
     }
     const k = `${order.rowIndex}-${areaId}`;
     setImporting(k);
-    const res = await importOrderArea(order, areaId);
+    const res = await importOrderArea(mediaId, order, areaId);
     setImporting(null);
     if (!res) {
       toast.error("取込に失敗しました");
@@ -97,7 +108,7 @@ export default function OrdersPage() {
       toast.info("この版へはすでに取込済みです");
       return;
     }
-    const areaName = MAMITAN_AREAS.find((a) => a.id === areaId)?.name ?? "";
+    const areaName = areas.find((a) => a.id === areaId)?.name ?? "";
     toast.success(
       `${areaName} に取込みました（枠 ${res.slotsCreated} 件${res.issuesCreated ? ` / 新規号 ${res.issuesCreated} 件` : ""}）`,
     );
@@ -118,14 +129,14 @@ export default function OrdersPage() {
         トップへ戻る
       </Link>
 
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold">
             <Inbox className="h-6 w-6" />
             受注インボックス
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            担当する版を選び、受注を確認して自版の号へ取り込みます（まみたん）。
+            媒体と担当版を選び、受注を確認して自版の号へ取り込みます。
           </p>
         </div>
         {orderSheetId && (
@@ -136,6 +147,24 @@ export default function OrdersPage() {
         )}
       </div>
 
+      {/* 媒体タブ */}
+      <div className="mb-5 flex flex-wrap gap-2">
+        {ORDER_MEDIA.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setMediaId(m.id)}
+            className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
+              mediaId === m.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+          >
+            {m.name}
+          </button>
+        ))}
+      </div>
+
       {!signedIn ? (
         <Card className="p-8 text-center text-muted-foreground">
           受注の取込には右上から Google ログインしてください。
@@ -143,9 +172,9 @@ export default function OrdersPage() {
       ) : !orderSheetId ? (
         <Card className="p-8 text-center">
           <FileSpreadsheet className="mx-auto h-10 w-10 text-muted-foreground" />
-          <p className="mt-3 font-medium">受注シートが未設定です</p>
+          <p className="mt-3 font-medium">{MEDIA[mediaId].name}の受注シートが未設定です</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            受注を受け取るには、最初に1回だけ設定画面で受注シートを作成してください。
+            この媒体の受注を受け取るには、設定画面で受注シートを作成してください。
           </p>
           <Link href="/profile" className={`mt-4 ${buttonVariants()}`}>
             <Settings className="h-4 w-4" />
@@ -255,10 +284,7 @@ export default function OrdersPage() {
                   const sizeOk = isKnownSize(o.size);
                   const needsYm = !o.year || !o.month;
                   return (
-                    <Card
-                      key={k}
-                      className={`p-4 ${taken ? "opacity-60" : ""}`}
-                    >
+                    <Card key={k} className={`p-4 ${taken ? "opacity-60" : ""}`}>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold">
                           {o.displayName || "（掲載名なし）"}
@@ -334,7 +360,7 @@ export default function OrdersPage() {
           )}
 
           {/* エリア版未対応の受注 */}
-          {unrouted.length > 0 && (areaFilter === "all") && (
+          {unrouted.length > 0 && areaFilter === "all" && (
             <section className="space-y-2">
               <div className="flex items-center gap-2">
                 <h2 className="text-base font-bold text-amber-600">エリア版未対応</h2>

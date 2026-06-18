@@ -21,15 +21,12 @@ import {
 import {
   ORDER_HEADERS,
   ORDER_RANGE,
-  ORDER_STATUS_TAKEN,
-  ORDER_STATUS_COL,
-  ORDER_NOTE_COL,
   mapOrderSize,
   parseOrders,
   orderKey,
   type OrderRow,
 } from "@/lib/orders";
-import { MEDIA, MAMITAN_AREAS } from "@/lib/config/media";
+import { MEDIA } from "@/lib/config/media";
 import {
   sizeSpan,
   findFreeCell,
@@ -150,25 +147,19 @@ interface StoreState {
   ) => Promise<ManuscriptImage | null>;
   deleteImage: (imageId: string) => Promise<void>;
 
-  // 受注インボックス（共有スプレッドシート）
-  /** Picker で選んだフォーム回答シートを受注インボックスに設定（状態列の見出しも用意） */
-  setOrderSheet: (id: string) => Promise<boolean>;
-  /** 受注シートを用意（無ければ作成しヘッダーを書く）。spreadsheetId を返す */
-  ensureOrderSheet: () => Promise<string | null>;
-  /** 受注シートを読み、受注行へパースして返す */
-  fetchOrders: () => Promise<OrderRow[] | null>;
-  /** 受注1件を、指定エリア版の号へ取り込む（号が無ければ作成）。単一commit */
-  importOrder: (
-    order: OrderRow,
-    areaIds: string[],
-  ) => Promise<{ slotsCreated: number; issuesCreated: number } | null>;
-  /** 受注1件を「単一エリア版」の号へ取り込み、版ごとの取込記録を残す */
+  // 受注インボックス（媒体ごとのアプリ自作スプレッドシート）
+  /** 受注シートIDを指定媒体に手動設定（状態列の見出しも用意） */
+  setOrderSheet: (mediaId: MediaId, id: string) => Promise<boolean>;
+  /** 指定媒体の受注シートを用意（無ければ作成しヘッダーを書く）。spreadsheetId を返す */
+  ensureOrderSheet: (mediaId: MediaId) => Promise<string | null>;
+  /** 指定媒体の受注シートを読み、受注行へパースして返す */
+  fetchOrders: (mediaId: MediaId) => Promise<OrderRow[] | null>;
+  /** 受注1件を「単一エリア版」の号へ取り込み、媒体・版ごとの取込記録を残す */
   importOrderArea: (
+    mediaId: MediaId,
     order: OrderRow,
     areaId: string,
   ) => Promise<{ slotsCreated: number; issuesCreated: number; alreadyTaken?: boolean } | null>;
-  /** 受注シートの該当行を「取込済」にし、取込メモを書き込む */
-  markOrderTaken: (rowIndex: number, note: string) => Promise<boolean>;
 
   /** 有効なトークンを返す（失効間際なら無UIで再取得）。取得不可なら null */
   ensureToken: () => Promise<string | null>;
@@ -351,29 +342,29 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
-  setOrderSheet: async (id) => {
+  setOrderSheet: async (mediaId, id) => {
     const token = await get().ensureToken();
     if (!token) {
       set({ error: "サインインが必要です" });
       return false;
     }
     try {
-      // フォーム回答シートに、アプリが使う「状態」「取込メモ」の見出しを用意（ベストエフォート）
+      // 「状態」「取込メモ」の見出しを用意（ベストエフォート）
       await updateValues(token, id, "R1:S1", [["状態", "取込メモ"]]);
     } catch {
-      // 書き込めなくても致命的でない（取込時の状態更新で再試行される）
+      // 書き込めなくても致命的でない
     }
     const db = get().db;
     const ok = await get().commit({
       ...db,
-      orderSheetId: id,
+      orderSheets: { ...(db.orderSheets ?? {}), [mediaId]: id },
       updatedAt: new Date().toISOString(),
     });
     return ok;
   },
 
-  ensureOrderSheet: async () => {
-    const existing = get().db.orderSheetId;
+  ensureOrderSheet: async (mediaId) => {
+    const existing = get().db.orderSheets?.[mediaId];
     if (existing) return existing;
     const token = await get().ensureToken();
     if (!token) {
@@ -381,12 +372,15 @@ export const useStore = create<StoreState>((set, get) => ({
       return null;
     }
     try {
-      const id = await createSpreadsheet(token, "kamiedit 受注インボックス");
+      const id = await createSpreadsheet(
+        token,
+        `kamiedit 受注インボックス（${MEDIA[mediaId].name}）`,
+      );
       await updateValues(token, id, "A1", [[...ORDER_HEADERS]]);
       const db = get().db;
       await get().commit({
         ...db,
-        orderSheetId: id,
+        orderSheets: { ...(db.orderSheets ?? {}), [mediaId]: id },
         updatedAt: new Date().toISOString(),
       });
       return id;
@@ -398,122 +392,41 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  fetchOrders: async () => {
-    const id = get().db.orderSheetId;
+  fetchOrders: async (mediaId) => {
+    const id = get().db.orderSheets?.[mediaId];
     if (!id) return [];
     const token = await get().ensureToken();
     if (!token) return null;
     try {
       const values = await getValues(token, id, ORDER_RANGE);
-      return parseOrders(values);
+      return parseOrders(values, MEDIA[mediaId].areas ?? []);
     } catch (e) {
       set({ error: e instanceof Error ? e.message : "受注の読込に失敗しました" });
       return null;
     }
   },
 
-  importOrder: async (order, areaIds) => {
+  importOrderArea: async (mediaId, order, areaId) => {
     const db = get().db;
     const now = new Date().toISOString();
     const me = get().user?.email ?? null;
     const size = mapOrderSize(order.size);
-    const pageDefault = MEDIA.mamitan.pageOptions?.[0] ?? 16;
-
-    const newIssues: Issue[] = [];
-    const newSlots: LayoutSlot[] = [];
-    let issuesCreated = 0;
-
-    for (const areaId of areaIds) {
-      // まみたん × エリア版 × 年 × 月 で号を特定（無ければ作成）
-      let issue =
-        [...newIssues, ...db.issues].find(
-          (i) =>
-            i.media_id === "mamitan" &&
-            i.area === areaId &&
-            i.year === order.year &&
-            i.month === order.month,
-        ) ?? null;
-      if (!issue) {
-        const areaName = MAMITAN_AREAS.find((a) => a.id === areaId)?.name ?? "";
-        issue = {
-          id: uid(),
-          media_id: "mamitan",
-          name: `${order.year ?? "—"}年${order.month ?? "—"}月号（${areaName}）`,
-          area: areaId,
-          year: order.year,
-          month: order.month,
-          page_count: pageDefault,
-          created_by: me,
-          created_at: now,
-          updated_at: now,
-        };
-        newIssues.push(issue);
-        issuesCreated++;
-      }
-
-      // 空きのある最初のページへ枠を生成（無ければ P1）
-      const issueId = issue.id;
-      const pageCount = issue.page_count ?? pageDefault;
-      const span = sizeSpan(size);
-      let placedPage = 1;
-      let cell: { col: number; row: number } = { col: 0, row: 0 };
-      for (let p = 1; p <= pageCount; p++) {
-        const pageSlots = [...db.slots, ...newSlots].filter(
-          (s) => s.issue_id === issueId && s.page_no === p,
-        );
-        const free = findFreeCell(occupancyExcluding(pageSlots, ""), span);
-        if (free) {
-          placedPage = p;
-          cell = free;
-          break;
-        }
-      }
-      const positionBase = [...db.slots, ...newSlots].filter(
-        (s) => s.issue_id === issueId && s.page_no === placedPage,
-      ).length;
-      newSlots.push({
-        id: uid(),
-        issue_id: issueId,
-        page_no: placedPage,
-        position: positionBase,
-        col: cell.col,
-        row: cell.row,
-        size,
-        kind: "ad",
-        company_name: order.client || null,
-        display_name: order.displayName || null,
-        manuscript_id: null,
-        source_type: null,
-        created_at: now,
-        updated_at: now,
-      });
-    }
-
-    const ok = await get().commit({
-      ...db,
-      issues: [...newIssues, ...db.issues],
-      slots: [...db.slots, ...newSlots],
-      updatedAt: now,
-    });
-    return ok ? { slotsCreated: newSlots.length, issuesCreated } : null;
-  },
-
-  importOrderArea: async (order, areaId) => {
-    const db = get().db;
-    const now = new Date().toISOString();
-    const me = get().user?.email ?? null;
-    const size = mapOrderSize(order.size);
-    const pageDefault = MEDIA.mamitan.pageOptions?.[0] ?? 16;
+    const pageDefault = MEDIA[mediaId].pageOptions?.[0] ?? 16;
+    const areas = MEDIA[mediaId].areas ?? [];
 
     if (!order.year || !order.month) {
       set({ error: "発行年・月が未入力です" });
       return null;
     }
 
-    // 既にこの版へ取込済みなら二重取込しない
+    // 既にこの媒体×版へ取込済みなら二重取込しない
     const key = orderKey(order);
     const takes = db.orderTakes ?? [];
-    if (takes.some((t) => t.key === key && t.areaId === areaId)) {
+    if (
+      takes.some(
+        (t) => t.mediaId === mediaId && t.key === key && t.areaId === areaId,
+      )
+    ) {
       return { slotsCreated: 0, issuesCreated: 0, alreadyTaken: true };
     }
 
@@ -521,20 +434,20 @@ export const useStore = create<StoreState>((set, get) => ({
     const newSlots: LayoutSlot[] = [];
     let issuesCreated = 0;
 
-    // まみたん × エリア版 × 年 × 月 で号を特定（無ければ作成）
+    // 媒体 × エリア版 × 年 × 月 で号を特定（無ければ作成）
     let issue =
       db.issues.find(
         (i) =>
-          i.media_id === "mamitan" &&
+          i.media_id === mediaId &&
           i.area === areaId &&
           i.year === order.year &&
           i.month === order.month,
       ) ?? null;
     if (!issue) {
-      const areaName = MAMITAN_AREAS.find((a) => a.id === areaId)?.name ?? "";
+      const areaName = areas.find((a) => a.id === areaId)?.name ?? "";
       issue = {
         id: uid(),
-        media_id: "mamitan",
+        media_id: mediaId,
         name: `${order.year ?? "—"}年${order.month ?? "—"}月号（${areaName}）`,
         area: areaId,
         year: order.year,
@@ -585,7 +498,7 @@ export const useStore = create<StoreState>((set, get) => ({
       updated_at: now,
     });
 
-    const take = { key, areaId, issueId, takenAt: now };
+    const take = { mediaId, key, areaId, issueId, takenAt: now };
     const ok = await get().commit({
       ...db,
       issues: [...newIssues, ...db.issues],
@@ -594,23 +507,6 @@ export const useStore = create<StoreState>((set, get) => ({
       updatedAt: now,
     });
     return ok ? { slotsCreated: newSlots.length, issuesCreated } : null;
-  },
-
-  markOrderTaken: async (rowIndex, note) => {
-    const id = get().db.orderSheetId;
-    const token = await get().ensureToken();
-    if (!id || !token) return false;
-    try {
-      await updateValues(
-        token,
-        id,
-        `${ORDER_STATUS_COL}${rowIndex}:${ORDER_NOTE_COL}${rowIndex}`,
-        [[ORDER_STATUS_TAKEN, note]],
-      );
-      return true;
-    } catch {
-      return false;
-    }
   },
 
   ensureToken: async () => {

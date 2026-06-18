@@ -57,6 +57,16 @@ export const MAMITAN_AREAS: AreaEdition[] = [
   { id: "kyoto", name: "京都版" },
 ];
 
+/**
+ * 家庭版ぱどのエリア版（3発行媒体・毎月発行）。
+ * 出典: ぱど提案媒体資料-26.03.pdf 配布エリアマップ。
+ */
+export const PADO_AREAS: AreaEdition[] = [
+  { id: "moriguchi_kadoma", name: "守口・門真版" },
+  { id: "neyagawa_hirakata", name: "寝屋川・枚方版" },
+  { id: "hirakata_katano", name: "枚方・交野版" },
+];
+
 export interface FieldOption {
   value: string;
   label: string;
@@ -258,6 +268,7 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
     hasLayout: true,
     cover: "/covers/pado.jpg",
     pageOptions: [16, 24, 32, 40],
+    areas: PADO_AREAS,
     sizes: layoutSizes,
   },
 
@@ -280,6 +291,16 @@ export const MEDIA: Record<MediaId, MediaConfig> = {
 };
 
 export const MEDIA_LIST: MediaConfig[] = Object.values(MEDIA);
+
+/** 受注インボックス対象の媒体（エリア版を持つ媒体のみ） */
+export const ORDER_MEDIA: MediaConfig[] = MEDIA_LIST.filter(
+  (m) => (m.areas?.length ?? 0) > 0,
+);
+
+/** 媒体IDからエリア版一覧を取得 */
+export function mediaAreas(mediaId: MediaId): AreaEdition[] {
+  return MEDIA[mediaId].areas ?? [];
+}
 
 /** サイズ定義を取得（variant 指定時はそのフィールド/画像数を解決） */
 export function resolveFormat(

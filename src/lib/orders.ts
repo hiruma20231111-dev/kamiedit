@@ -4,7 +4,7 @@
  * エリア版・発行年/月を加えた構成。Googleフォーム送信時に Apps Script が
  * この列順でアプリのシートへ1行追記する（方式A）。
  */
-import { MAMITAN_AREAS } from "@/lib/config/media";
+import type { AreaEdition } from "@/lib/config/media";
 
 /** 受注シートのヘッダー（アプリが作成。Apps Scriptもこの順で追記する） */
 export const ORDER_HEADERS = [
@@ -104,9 +104,12 @@ function splitAreas(raw: string): string[] {
     .filter(Boolean);
 }
 
-/** エリア版名 → MAMITAN_AREAS のID（一致しなければ null） */
-export function areaIdFromName(name: string): string | null {
-  return MAMITAN_AREAS.find((a) => a.name === name.trim())?.id ?? null;
+/** エリア版名 → 指定媒体エリア版のID（一致しなければ null） */
+export function areaIdFromName(
+  name: string,
+  areas: AreaEdition[],
+): string | null {
+  return areas.find((a) => a.name === name.trim())?.id ?? null;
 }
 
 function num(v: string | undefined): number | null {
@@ -118,8 +121,12 @@ function num(v: string | undefined): number | null {
 /**
  * シートの values（2次元配列）を受注行へ変換する。
  * ヘッダー行から列位置を解決するので、列順が多少違っても拾える。
+ * areas: 媒体のエリア版一覧（エリア版名→IDの解決に使用）。
  */
-export function parseOrders(values: string[][]): OrderRow[] {
+export function parseOrders(
+  values: string[][],
+  areas: AreaEdition[],
+): OrderRow[] {
   if (!values.length) return [];
   const header = values[0].map((h) => (h ?? "").trim());
   const idx = (name: string) => {
@@ -164,7 +171,7 @@ export function parseOrders(values: string[][]): OrderRow[] {
     const areaIds: string[] = [];
     const unknownAreas: string[] = [];
     for (const n of areaNames) {
-      const id = areaIdFromName(n);
+      const id = areaIdFromName(n, areas);
       if (id) areaIds.push(id);
       else unknownAreas.push(n);
     }

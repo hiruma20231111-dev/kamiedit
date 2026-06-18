@@ -4,44 +4,55 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { orderKey } from "@/lib/orders";
+import { ORDER_MEDIA } from "@/lib/config/media";
 import { Inbox, ArrowRight } from "lucide-react";
 
 /**
  * トップページの「受注インボックス」横長CTAバナー。
  * 使用頻度が高いので大きく・ホバー演出付きで目立たせる。
- * サインイン済みかつ受注シート設定済みなら未取込件数を表示する。
+ * サインイン済みなら全媒体の未取込件数の合計を表示する。
  */
 export function OrderInboxBanner() {
   const signedIn = useStore((s) => s.signedIn);
-  const orderSheetId = useStore((s) => s.db.orderSheetId);
+  const orderSheets = useStore((s) => s.db.orderSheets);
   const orderTakes = useStore((s) => s.db.orderTakes ?? []);
   const fetchOrders = useStore((s) => s.fetchOrders);
   const [pending, setPending] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
-    if (!signedIn || !orderSheetId) {
+    const mediaIds = ORDER_MEDIA.map((m) => m.id).filter(
+      (id) => orderSheets?.[id],
+    );
+    if (!signedIn || mediaIds.length === 0) {
       setPending(null);
       return;
     }
     void (async () => {
-      const rows = await fetchOrders();
-      if (!active || !rows) return;
       let n = 0;
-      for (const o of rows) {
-        for (const areaId of o.areaIds) {
-          const taken =
-            o.taken ||
-            orderTakes.some((t) => t.key === orderKey(o) && t.areaId === areaId);
-          if (!taken) n++;
+      for (const mid of mediaIds) {
+        const rows = await fetchOrders(mid);
+        if (!rows) continue;
+        for (const o of rows) {
+          for (const areaId of o.areaIds) {
+            const taken =
+              o.taken ||
+              orderTakes.some(
+                (t) =>
+                  t.mediaId === mid &&
+                  t.key === orderKey(o) &&
+                  t.areaId === areaId,
+              );
+            if (!taken) n++;
+          }
         }
       }
-      setPending(n);
+      if (active) setPending(n);
     })();
     return () => {
       active = false;
     };
-  }, [signedIn, orderSheetId, fetchOrders, orderTakes]);
+  }, [signedIn, orderSheets, fetchOrders, orderTakes]);
 
   return (
     <Link

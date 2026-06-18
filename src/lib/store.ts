@@ -26,6 +26,7 @@ import {
   ORDER_NOTE_COL,
   mapOrderSize,
   parseOrders,
+  orderKey,
   type OrderRow,
 } from "@/lib/orders";
 import { MEDIA, MAMITAN_AREAS } from "@/lib/config/media";
@@ -161,6 +162,11 @@ interface StoreState {
     order: OrderRow,
     areaIds: string[],
   ) => Promise<{ slotsCreated: number; issuesCreated: number } | null>;
+  /** 受注1件を「単一エリア版」の号へ取り込み、版ごとの取込記録を残す */
+  importOrderArea: (
+    order: OrderRow,
+    areaId: string,
+  ) => Promise<{ slotsCreated: number; issuesCreated: number; alreadyTaken?: boolean } | null>;
   /** 受注シートの該当行を「取込済」にし、取込メモを書き込む */
   markOrderTaken: (rowIndex: number, note: string) => Promise<boolean>;
 
@@ -487,6 +493,104 @@ export const useStore = create<StoreState>((set, get) => ({
       ...db,
       issues: [...newIssues, ...db.issues],
       slots: [...db.slots, ...newSlots],
+      updatedAt: now,
+    });
+    return ok ? { slotsCreated: newSlots.length, issuesCreated } : null;
+  },
+
+  importOrderArea: async (order, areaId) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    const me = get().user?.email ?? null;
+    const size = mapOrderSize(order.size);
+    const pageDefault = MEDIA.mamitan.pageOptions?.[0] ?? 16;
+
+    if (!order.year || !order.month) {
+      set({ error: "発行年・月が未入力です" });
+      return null;
+    }
+
+    // 既にこの版へ取込済みなら二重取込しない
+    const key = orderKey(order);
+    const takes = db.orderTakes ?? [];
+    if (takes.some((t) => t.key === key && t.areaId === areaId)) {
+      return { slotsCreated: 0, issuesCreated: 0, alreadyTaken: true };
+    }
+
+    const newIssues: Issue[] = [];
+    const newSlots: LayoutSlot[] = [];
+    let issuesCreated = 0;
+
+    // まみたん × エリア版 × 年 × 月 で号を特定（無ければ作成）
+    let issue =
+      db.issues.find(
+        (i) =>
+          i.media_id === "mamitan" &&
+          i.area === areaId &&
+          i.year === order.year &&
+          i.month === order.month,
+      ) ?? null;
+    if (!issue) {
+      const areaName = MAMITAN_AREAS.find((a) => a.id === areaId)?.name ?? "";
+      issue = {
+        id: uid(),
+        media_id: "mamitan",
+        name: `${order.year ?? "—"}年${order.month ?? "—"}月号（${areaName}）`,
+        area: areaId,
+        year: order.year,
+        month: order.month,
+        page_count: pageDefault,
+        created_by: me,
+        created_at: now,
+        updated_at: now,
+      };
+      newIssues.push(issue);
+      issuesCreated++;
+    }
+
+    // 空きのある最初のページへ枠を生成（無ければ P1）
+    const issueId = issue.id;
+    const pageCount = issue.page_count ?? pageDefault;
+    const span = sizeSpan(size);
+    let placedPage = 1;
+    let cell: { col: number; row: number } = { col: 0, row: 0 };
+    for (let p = 1; p <= pageCount; p++) {
+      const pageSlots = [...db.slots, ...newSlots].filter(
+        (s) => s.issue_id === issueId && s.page_no === p,
+      );
+      const free = findFreeCell(occupancyExcluding(pageSlots, ""), span);
+      if (free) {
+        placedPage = p;
+        cell = free;
+        break;
+      }
+    }
+    const positionBase = [...db.slots, ...newSlots].filter(
+      (s) => s.issue_id === issueId && s.page_no === placedPage,
+    ).length;
+    newSlots.push({
+      id: uid(),
+      issue_id: issueId,
+      page_no: placedPage,
+      position: positionBase,
+      col: cell.col,
+      row: cell.row,
+      size,
+      kind: "ad",
+      company_name: order.client || null,
+      display_name: order.displayName || null,
+      manuscript_id: null,
+      source_type: null,
+      created_at: now,
+      updated_at: now,
+    });
+
+    const take = { key, areaId, issueId, takenAt: now };
+    const ok = await get().commit({
+      ...db,
+      issues: [...newIssues, ...db.issues],
+      slots: [...db.slots, ...newSlots],
+      orderTakes: [...takes, take],
       updatedAt: now,
     });
     return ok ? { slotsCreated: newSlots.length, issuesCreated } : null;

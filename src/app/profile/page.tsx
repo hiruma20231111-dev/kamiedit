@@ -9,20 +9,49 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Eye, EyeOff, KeyRound, ExternalLink } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, KeyRound, ExternalLink, Inbox, FileSpreadsheet, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ProfilePage() {
   const user = useStore((s) => s.user);
+  const signedIn = useStore((s) => s.signedIn);
+  const orderSheetId = useStore((s) => s.db.orderSheetId);
+  const ensureOrderSheet = useStore((s) => s.ensureOrderSheet);
   const [key, setKey] = useState("");
   const [show, setShow] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setKey(getGeminiKey());
     setLoaded(true);
   }, []);
+
+  async function createOrderSheet() {
+    setCreating(true);
+    try {
+      const id = await ensureOrderSheet();
+      if (id) toast.success("受注シートを作成しました");
+      else toast.error("受注シートの作成に失敗しました");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "受注シートの作成に失敗しました");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function copySheetId() {
+    if (!orderSheetId) return;
+    try {
+      await navigator.clipboard.writeText(orderSheetId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("コピーに失敗しました");
+    }
+  }
 
   function save() {
     setGeminiKey(key.trim());
@@ -117,6 +146,57 @@ export default function ProfilePage() {
           Google AI Studio で APIキーを取得
           <ExternalLink className="h-3.5 w-3.5" />
         </a>
+      </Card>
+
+      <Card className="mt-6 p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <Inbox className="h-5 w-5" />
+          <h2 className="font-semibold">受注インボックス設定</h2>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          営業からの受注を受け取るシートです。<strong>最初に1回だけ</strong>作成し、
+          表示されるシートIDを受注フォーム作成スクリプトに貼り付ければ設定完了。
+          以降は受注が自動でアプリに届きます（受注の確認・取込は
+          <Link href="/orders" className="text-primary hover:underline">受注インボックス</Link>
+          から）。
+        </p>
+
+        {!signedIn ? (
+          <p className="text-sm text-muted-foreground">
+            設定には右上から Google ログインしてください。
+          </p>
+        ) : !orderSheetId ? (
+          <Button onClick={() => void createOrderSheet()} disabled={creating}>
+            <FileSpreadsheet className="h-4 w-4" />
+            {creating ? "作成中…" : "受注シートを作成"}
+          </Button>
+        ) : (
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/40 p-3">
+              <p className="mb-1 text-sm font-medium">
+                シートID（受注フォーム作成スクリプトの APP_SHEET_ID に貼り付け）
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-background px-2 py-1 text-xs">
+                  {orderSheetId}
+                </code>
+                <Button variant="outline" size="sm" onClick={() => void copySheetId()}>
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "コピー済" : "コピー"}
+                </Button>
+              </div>
+            </div>
+            <a
+              href={`https://docs.google.com/spreadsheets/d/${orderSheetId}/edit`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              受注シートを開く
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          </div>
+        )}
       </Card>
     </div>
   );

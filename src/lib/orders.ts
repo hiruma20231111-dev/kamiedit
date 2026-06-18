@@ -91,6 +91,11 @@ export interface OrderRow {
   taken: boolean;
 }
 
+/** 受注の一意キー（版ごとの取込記録に使用）。タイムスタンプ＋掲載名＋サイズ */
+export function orderKey(o: OrderRow): string {
+  return `${o.timestamp}__${o.displayName}__${o.size}`;
+}
+
 /** エリア版セルを名前配列へ（「大阪市版, 京阪版」「大阪市版、京阪版」等を許容） */
 function splitAreas(raw: string): string[] {
   return raw

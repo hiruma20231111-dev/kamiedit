@@ -6,6 +6,17 @@ import type {
   AttackManuscript,
 } from "@/lib/types";
 
+/** 受注を「どのエリア版の号へ取り込んだか」の記録（版ごとに独立管理） */
+export interface OrderTake {
+  /** 受注の一意キー（タイムスタンプ＋掲載名＋サイズ） */
+  key: string;
+  /** 取込先エリア版ID */
+  areaId: string;
+  /** 取り込んだ号ID */
+  issueId: string;
+  takenAt: string;
+}
+
 /**
  * Google ドライブに JSON として保存される「DB」の形。
  * 1ファイル（kamiedit-db.json）に全データを保持する。画像バイナリは別ファイルで、
@@ -20,6 +31,8 @@ export interface DriveDB {
   attacks: AttackManuscript[];
   /** 受注インボックス用スプレッドシートの spreadsheetId（アプリが作成） */
   orderSheetId?: string | null;
+  /** 受注×エリア版の取込記録（版ごとに取込済みを判定） */
+  orderTakes?: OrderTake[];
   updatedAt: string;
 }
 
@@ -32,6 +45,7 @@ export function emptyDb(): DriveDB {
     images: [],
     attacks: [],
     orderSheetId: null,
+    orderTakes: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -49,6 +63,7 @@ export function normalizeDb(raw: unknown): DriveDB {
     images: Array.isArray(r.images) ? r.images : [],
     attacks: Array.isArray(r.attacks) ? r.attacks : [],
     orderSheetId: typeof r.orderSheetId === "string" ? r.orderSheetId : null,
+    orderTakes: Array.isArray(r.orderTakes) ? r.orderTakes : [],
     updatedAt: typeof r.updatedAt === "string" ? r.updatedAt : base.updatedAt,
   };
 }

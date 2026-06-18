@@ -4,27 +4,25 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { MAMITAN_AREAS } from "@/lib/config/media";
-import { GOOGLE_API_KEY } from "@/lib/google/config";
-import { pickSpreadsheet } from "@/lib/google/picker";
 import { isKnownSize, mapOrderSize, type OrderRow } from "@/lib/orders";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Inbox, ExternalLink, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { ArrowLeft, Inbox, ExternalLink, RefreshCw, FileSpreadsheet, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export default function OrdersPage() {
   const signedIn = useStore((s) => s.signedIn);
   const orderSheetId = useStore((s) => s.db.orderSheetId);
-  const setOrderSheet = useStore((s) => s.setOrderSheet);
-  const ensureToken = useStore((s) => s.ensureToken);
+  const ensureOrderSheet = useStore((s) => s.ensureOrderSheet);
   const fetchOrders = useStore((s) => s.fetchOrders);
   const importOrder = useStore((s) => s.importOrder);
   const markOrderTaken = useStore((s) => s.markOrderTaken);
 
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [picking, setPicking] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [importing, setImporting] = useState<number | null>(null);
   // 行ごとの選択エリア版（rowIndex -> areaId[]）
   const [selected, setSelected] = useState<Record<number, string[]>>({});
@@ -53,31 +51,31 @@ export default function OrdersPage() {
     void refresh();
   }, [refresh]);
 
-  async function handlePick() {
-    if (!GOOGLE_API_KEY) {
-      toast.error("Picker のAPIキーが未設定です（管理者設定が必要）");
-      return;
-    }
-    setPicking(true);
+  async function handleCreate() {
+    setCreating(true);
     try {
-      const token = await ensureToken();
-      if (!token) {
-        toast.error("サインインが必要です");
-        return;
-      }
-      const picked = await pickSpreadsheet(token, GOOGLE_API_KEY);
-      if (!picked) return; // キャンセル
-      const ok = await setOrderSheet(picked.id);
-      if (ok) {
-        toast.success(`受注シート「${picked.name}」を設定しました`);
+      const id = await ensureOrderSheet();
+      if (id) {
+        toast.success("受注シートを作成しました");
         void refresh();
       } else {
-        toast.error("設定に失敗しました");
+        toast.error("受注シートの作成に失敗しました");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "シートの選択に失敗しました");
+      toast.error(e instanceof Error ? e.message : "受注シートの作成に失敗しました");
     } finally {
-      setPicking(false);
+      setCreating(false);
+    }
+  }
+
+  async function copySheetId() {
+    if (!orderSheetId) return;
+    try {
+      await navigator.clipboard.writeText(orderSheetId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("コピーに失敗しました");
     }
   }
 
@@ -162,31 +160,27 @@ export default function OrdersPage() {
       ) : !orderSheetId ? (
         <Card className="p-8 text-center">
           <FileSpreadsheet className="mx-auto h-10 w-10 text-muted-foreground" />
-          <p className="mt-3 font-medium">受注シートを選んでください</p>
+          <p className="mt-3 font-medium">受注シートを作成してください</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            Google フォームの「回答シート」を選びます。営業はフォームから受注を投稿し、
-            ここでそのシートを選ぶと、未取込の受注を割付へ取り込めます。
+            このアプリ専用の受注シートを作成します。作成後に表示される
+            「シートID」を受注フォーム作成スクリプトに貼り付ければ、
+            営業がフォームで投稿した受注がここに届きます。
           </p>
-          <Button className="mt-4" onClick={() => void handlePick()} disabled={picking}>
+          <Button className="mt-4" onClick={() => void handleCreate()} disabled={creating}>
             <FileSpreadsheet className="h-4 w-4" />
-            {picking ? "選択中…" : "受注シートを選ぶ"}
+            {creating ? "作成中…" : "受注シートを作成"}
           </Button>
-          {!GOOGLE_API_KEY && (
-            <p className="mt-2 text-xs text-amber-600">
-              ※ Picker のAPIキーが未設定です（管理者設定が必要）
-            </p>
-          )}
         </Card>
       ) : (
         <div className="space-y-6">
-          <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
-            <div className="text-sm">
-              <p className="font-medium">受注シート（フォームの回答）</p>
-              <p className="text-muted-foreground">
-                未取込 {pending.length} 件 / 取込済 {taken.length} 件
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
+          <Card className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm">
+                <p className="font-medium">受注シート（このアプリが作成）</p>
+                <p className="text-muted-foreground">
+                  未取込 {pending.length} 件 / 取込済 {taken.length} 件
+                </p>
+              </div>
               {sheetUrl && (
                 <a
                   href={sheetUrl}
@@ -198,10 +192,21 @@ export default function OrdersPage() {
                   シートを開く
                 </a>
               )}
-              <Button variant="outline" size="sm" onClick={() => void handlePick()} disabled={picking}>
-                <FileSpreadsheet className="h-4 w-4" />
-                別のシートを選ぶ
-              </Button>
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <p className="mb-1 font-medium">シートID（受注フォーム作成スクリプトに貼り付け）</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-background px-2 py-1 text-xs">
+                  {orderSheetId}
+                </code>
+                <Button variant="outline" size="sm" onClick={() => void copySheetId()}>
+                  {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  {copied ? "コピー済" : "コピー"}
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                このIDを <code>まみたん受注フォーム作成.gs</code> の <code>APP_SHEET_ID</code> に貼り付けて実行すると、フォームが作成され、投稿がこのシートに自動で届きます。
+              </p>
             </div>
           </Card>
 

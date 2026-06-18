@@ -45,14 +45,14 @@ export default function OrdersPage() {
     [orderTakes],
   );
 
-  // エリア版ごとに受注を仕分け
+  // エリア版ごとに受注を仕分け（全8版を常に保持。タブは常時表示）
   const groups = useMemo(() => {
     return MAMITAN_AREAS.map((area) => {
       const list = orders.filter((o) => o.areaIds.includes(area.id));
       const pending = list.filter((o) => !isTaken(o, area.id));
       const done = list.filter((o) => isTaken(o, area.id));
       return { area, list, pending, done };
-    }).filter((g) => g.list.length > 0);
+    });
   }, [orders, isTaken]);
 
   // どの版にも振り分けられない受注（エリア版が未対応）
@@ -61,8 +61,11 @@ export default function OrdersPage() {
     [orders],
   );
 
+  // 表示するセクション: 「すべて」は受注のある版のみ／個別選択時はその版（空でも表示）
   const visibleGroups =
-    areaFilter === "all" ? groups : groups.filter((g) => g.area.id === areaFilter);
+    areaFilter === "all"
+      ? groups.filter((g) => g.list.length > 0)
+      : groups.filter((g) => g.area.id === areaFilter);
 
   async function handleImportArea(order: OrderRow, areaId: string) {
     if (!order.year || !order.month) {
@@ -196,6 +199,12 @@ export default function OrdersPage() {
                     <Badge variant="outline">取込済 {g.done.length}</Badge>
                   )}
                 </div>
+
+                {g.list.length === 0 && (
+                  <Card className="p-6 text-center text-sm text-muted-foreground">
+                    {loading ? "読み込み中…" : `${g.area.name}の受注はまだありません。`}
+                  </Card>
+                )}
 
                 {g.list.map((o) => {
                   const taken = isTaken(o, g.area.id);

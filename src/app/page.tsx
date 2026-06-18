@@ -4,6 +4,7 @@ import { MEDIA_LIST } from "@/lib/config/media";
 import { useStore } from "@/lib/store";
 import { MediaCard } from "@/components/media-card";
 import { AttackCard } from "@/components/attack-card";
+import { OrderInboxBanner } from "@/components/order-inbox-banner";
 import { Sparkles, TriangleAlert, Eye } from "lucide-react";
 
 export default function Home() {
@@ -51,6 +52,9 @@ export default function Home() {
             閲覧モードです。編集・保存するには右上から Google ログインしてください。
           </div>
         )}
+
+        {/* 使用頻度の高い受注インボックスへの大きな導線（全媒体タブの上） */}
+        <OrderInboxBanner />
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {MEDIA_LIST.map((media) => (

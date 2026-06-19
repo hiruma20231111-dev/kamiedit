@@ -6,12 +6,19 @@ import { getGeminiKey, setGeminiKey } from "@/lib/profile";
 import { GEMINI_MODEL } from "@/lib/gemini";
 import { useStore } from "@/lib/store";
 import { MEDIA, ORDER_MEDIA, type MediaId } from "@/lib/config/media";
+import { emptySalesConfig, type PlanMaster } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Eye, EyeOff, KeyRound, ExternalLink, Inbox, FileSpreadsheet, Copy, Check } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, KeyRound, ExternalLink, Inbox, FileSpreadsheet, Copy, Check, BarChart3, Coins, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+
+function uid(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+}
 
 export default function ProfilePage() {
   const user = useStore((s) => s.user);
@@ -146,6 +153,219 @@ export default function ProfilePage() {
           </div>
         )}
       </Card>
+
+      <Card className="mt-6 p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <BarChart3 className="h-5 w-5" />
+          <h2 className="font-semibold">売上ダッシュボード設定</h2>
+        </div>
+        <p className="mb-4 text-sm text-muted-foreground">
+          <Link href="/dashboard" className="text-primary hover:underline">売上ダッシュボード</Link>
+          の<strong>原価・粗利・企画別目標</strong>に使う設定です。
+          号ごとの売上目標はダッシュボード側で版ごとに入力できます。
+        </p>
+        {!signedIn ? (
+          <p className="text-sm text-muted-foreground">
+            設定には右上から Google ログインしてください。
+          </p>
+        ) : (
+          <SalesSettings />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+/** ページ単価（原価）と企画マスタの設定 */
+function SalesSettings() {
+  const config = useStore((s) => s.db.salesConfig) ?? emptySalesConfig();
+  const setSalesConfig = useStore((s) => s.setSalesConfig);
+
+  // ページ単価はローカル草稿を持ち、保存ボタンでまとめて反映（既存値で初期化）
+  const [unitDraft, setUnitDraft] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const m of ORDER_MEDIA) {
+      const v = config.pageUnitPrice?.[m.id];
+      init[m.id] = v != null ? String(v) : "";
+    }
+    return init;
+  });
+  const [savingUnit, setSavingUnit] = useState(false);
+
+  async function saveUnitPrices() {
+    const next: Partial<Record<MediaId, number>> = {};
+    for (const m of ORDER_MEDIA) {
+      const n = Number((unitDraft[m.id] ?? "").replace(/[^\d.-]/g, ""));
+      if (Number.isFinite(n) && n > 0) next[m.id] = n;
+    }
+    setSavingUnit(true);
+    try {
+      const ok = await setSalesConfig({ pageUnitPrice: next });
+      if (ok) toast.success("ページ単価を保存しました");
+      else toast.error("保存に失敗しました");
+    } finally {
+      setSavingUnit(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* ページ単価（原価） */}
+      <div>
+        <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+          <Coins className="h-4 w-4" />
+          ページ単価（原価）
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          1ページあたりの発行原価。<strong>原価 = ページ単価 × 台割ページ数</strong>、
+          <strong>粗利 = 売上実績 − 原価</strong> で各号に自動反映されます。
+        </p>
+        <div className="space-y-2">
+          {ORDER_MEDIA.map((m) => (
+            <div key={m.id} className="flex items-center gap-2">
+              <span className="w-28 shrink-0 text-sm">{m.name}</span>
+              <div className="relative flex-1">
+                <Input
+                  value={unitDraft[m.id] ?? ""}
+                  onChange={(e) =>
+                    setUnitDraft((d) => ({ ...d, [m.id]: e.target.value }))
+                  }
+                  placeholder="例: 80000"
+                  inputMode="numeric"
+                  className="pr-16"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  円/ページ
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button className="mt-3" onClick={() => void saveUnitPrices()} disabled={savingUnit}>
+          {savingUnit ? "保存中…" : "ページ単価を保存"}
+        </Button>
+      </div>
+
+      {/* 企画／特集マスタ */}
+      <div className="border-t pt-5">
+        <div className="mb-2 text-sm font-semibold">企画／特集マスタ</div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          企画別の目標売上を登録すると、ダッシュボードの企画別に達成率が出ます（目標は任意）。
+        </p>
+        <div className="space-y-4">
+          {ORDER_MEDIA.map((m) => (
+            <PlanMasterEditor key={m.id} mediaId={m.id} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 1媒体ぶんの企画マスタ編集（追加・目標編集・削除） */
+function PlanMasterEditor({ mediaId }: { mediaId: MediaId }) {
+  const plans = useStore((s) => s.db.salesConfig?.plans ?? []);
+  const setSalesConfig = useStore((s) => s.setSalesConfig);
+  const mine = plans.filter((p) => p.mediaId === mediaId);
+
+  const [name, setName] = useState("");
+  const [target, setTarget] = useState("");
+
+  async function add() {
+    const nm = name.trim();
+    if (!nm) return;
+    if (mine.some((p) => p.name === nm)) {
+      toast.error("同じ企画名が既にあります");
+      return;
+    }
+    const t = Number(target.replace(/[^\d.-]/g, ""));
+    const plan: PlanMaster = {
+      id: uid(),
+      mediaId,
+      name: nm,
+      targetAmount: Number.isFinite(t) && t > 0 ? t : null,
+    };
+    const ok = await setSalesConfig({ plans: [...plans, plan] });
+    if (ok) {
+      setName("");
+      setTarget("");
+    } else {
+      toast.error("追加に失敗しました");
+    }
+  }
+
+  async function updateTarget(id: string, value: string) {
+    const t = Number(value.replace(/[^\d.-]/g, ""));
+    const amount = Number.isFinite(t) && t > 0 ? t : null;
+    await setSalesConfig({
+      plans: plans.map((p) => (p.id === id ? { ...p, targetAmount: amount } : p)),
+    });
+  }
+
+  async function remove(id: string) {
+    await setSalesConfig({ plans: plans.filter((p) => p.id !== id) });
+  }
+
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="mb-2 text-sm font-semibold">{MEDIA[mediaId].name}</p>
+      {mine.length > 0 ? (
+        <div className="mb-2 space-y-1.5">
+          {mine.map((p) => (
+            <div key={p.id} className="flex items-center gap-2">
+              <span className="flex-1 truncate text-sm">{p.name}</span>
+              <div className="relative w-32">
+                <Input
+                  defaultValue={p.targetAmount != null ? String(p.targetAmount) : ""}
+                  onBlur={(e) => void updateTarget(p.id, e.target.value)}
+                  placeholder="目標(任意)"
+                  inputMode="numeric"
+                  className="h-8 pr-7 text-sm"
+                />
+                <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  円
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-muted-foreground"
+                onClick={() => void remove(p.id)}
+                aria-label="削除"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mb-2 text-xs text-muted-foreground">企画が未登録です。</p>
+      )}
+      <div className="flex items-center gap-2">
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void add();
+          }}
+          placeholder="企画名（例: スクール特集）"
+          className="h-8 flex-1 text-sm"
+        />
+        <Input
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void add();
+          }}
+          placeholder="目標(任意)"
+          inputMode="numeric"
+          className="h-8 w-28 text-sm"
+        />
+        <Button size="sm" className="h-8" onClick={() => void add()} disabled={!name.trim()}>
+          <Plus className="h-4 w-4" />
+          追加
+        </Button>
+      </div>
     </div>
   );
 }

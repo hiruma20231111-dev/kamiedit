@@ -36,7 +36,7 @@ import {
   COLS,
   ROWS,
 } from "@/lib/layout";
-import { emptyDb, type DriveDB } from "@/lib/db";
+import { emptyDb, emptySalesConfig, type DriveDB, type SalesConfig } from "@/lib/db";
 import {
   LAYOUT_PKG_KIND,
   LAYOUT_PKG_VERSION,
@@ -160,6 +160,10 @@ interface StoreState {
     order: OrderRow,
     areaId: string,
   ) => Promise<{ slotsCreated: number; issuesCreated: number; alreadyTaken?: boolean } | null>;
+
+  // 売上ダッシュボード設定（目標・原価単価・企画マスタ）
+  /** 売上設定を部分更新して Drive へ保存 */
+  setSalesConfig: (patch: Partial<SalesConfig>) => Promise<boolean>;
 
   /** 有効なトークンを返す（失効間際なら無UIで再取得）。取得不可なら null */
   ensureToken: () => Promise<string | null>;
@@ -507,6 +511,16 @@ export const useStore = create<StoreState>((set, get) => ({
       updatedAt: now,
     });
     return ok ? { slotsCreated: newSlots.length, issuesCreated } : null;
+  },
+
+  setSalesConfig: async (patch) => {
+    const db = get().db;
+    const current = db.salesConfig ?? emptySalesConfig();
+    return get().commit({
+      ...db,
+      salesConfig: { ...current, ...patch },
+      updatedAt: new Date().toISOString(),
+    });
   },
 
   ensureToken: async () => {

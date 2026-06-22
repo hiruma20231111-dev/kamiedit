@@ -221,10 +221,25 @@ export default function DashboardPage() {
               </div>
             )}
 
-            {/* 原価・粗利 */}
+            {/* 発行原価・原価回収（現在地）・粗利 */}
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
               <span className="text-muted-foreground">
-                原価 {totals.cost != null ? yen(totals.cost) : "—"}
+                発行原価 {totals.cost != null ? yen(totals.cost) : "—"}
+              </span>
+              <span className="text-muted-foreground">
+                原価回収（現在地）{" "}
+                <span className="font-semibold text-foreground">
+                  {pct(totals.costRecovery)}
+                </span>
+              </span>
+              <span className="text-muted-foreground">
+                広告1P原価{" "}
+                {totals.adPageCost != null ? yen(totals.adPageCost) : "—"}
+                {totals.adPages > 0 && (
+                  <span className="ml-1 text-xs">
+                    （広告{Math.round(totals.adPages * 10) / 10}P）
+                  </span>
+                )}
               </span>
               <span className="text-muted-foreground">
                 粗利{" "}
@@ -239,6 +254,23 @@ export default function DashboardPage() {
                 </span>
               </span>
             </div>
+
+            {/* 原価回収バー（発行原価に対する売上の現在地） */}
+            {totals.cost != null && (
+              <div className="mt-2">
+                <div className="h-2 overflow-hidden rounded-full bg-white/60 dark:bg-black/20">
+                  <div
+                    className="h-full rounded-full bg-linear-to-r from-sky-400 to-blue-600 transition-all"
+                    style={{
+                      width: `${Math.min(100, Math.round((totals.costRecovery ?? 0) * 100))}%`,
+                    }}
+                  />
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  売上 {yen(totals.amount)} / 発行原価 {yen(totals.cost)}（広告枠で原価を回収）
+                </p>
+              </div>
+            )}
 
             {(totals.target == null || totals.cost == null) && (
               <p className="mt-2 text-xs text-muted-foreground">
@@ -368,10 +400,22 @@ function AreaCard({
         )}
       </div>
 
-      {/* 原価・粗利 */}
-      {(r.cost != null || r.profit != null) && (
+      {/* 発行原価・原価回収（現在地）・粗利 */}
+      {r.cost != null && (
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
-          <span>原価 {r.cost != null ? yen(r.cost) : "—"}</span>
+          <span>発行原価 {yen(r.cost)}</span>
+          <span>
+            原価回収{" "}
+            <span className="font-semibold text-foreground">
+              {pct(r.costRecovery)}
+            </span>
+          </span>
+          <span>
+            広告1P原価 {r.adPageCost != null ? yen(r.adPageCost) : "—"}
+            {r.adPages > 0 && (
+              <span className="ml-0.5">（広告{Math.round(r.adPages * 10) / 10}P）</span>
+            )}
+          </span>
           <span>
             粗利{" "}
             <span

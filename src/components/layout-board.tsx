@@ -9,7 +9,8 @@ import { THEME_STYLES } from "@/lib/theme";
 import { AddFrameDialog } from "@/components/add-frame-dialog";
 import { SlotActionDialog } from "@/components/slot-action-dialog";
 import { Badge } from "@/components/ui/badge";
-import { PackageCheck, FileText } from "lucide-react";
+import { PackageCheck, FileText, Minus, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 const CELLS: { c: number; r: number }[] = [];
 for (let r = 0; r < ROWS; r++) {
@@ -82,6 +83,8 @@ export function LayoutBoard({
   const signedIn = useStore((s) => s.signedIn);
   const allSlots = useStore((s) => s.db.slots);
   const placeSlot = useStore((s) => s.placeSlot);
+  const setIssuePageCount = useStore((s) => s.setIssuePageCount);
+  const [pageBusy, setPageBusy] = useState(false);
   const [selected, setSelected] = useState<LayoutSlot | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [overCell, setOverCell] = useState<string | null>(null);
@@ -154,6 +157,23 @@ export function LayoutBoard({
     setOverCell(null);
     setGhost(null);
   };
+
+  async function changePages(delta: number) {
+    const target = pageCount + delta;
+    if (target < 1 || pageBusy) return;
+    setPageBusy(true);
+    const res = await setIssuePageCount(issueId, target);
+    setPageBusy(false);
+    if (!res.ok && res.overflow > 0) {
+      toast.error(
+        `ページを減らせません：移動先の空きが足りない枠が ${res.overflow} 件あります。先に枠を整理してください。`,
+      );
+    } else if (!res.ok) {
+      toast.error("ページ数の変更に失敗しました");
+    } else if (delta < 0 && res.moved > 0) {
+      toast.success(`枠 ${res.moved} 件を前のページへ自動で移動しました`);
+    }
+  }
 
   const renderPage = (page: number) => {
     const pageSlots = slots.filter((s) => s.page_no === page);
@@ -299,7 +319,36 @@ export function LayoutBoard({
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-        <span>{pageCount}ページ構成</span>
+        {signedIn ? (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="font-medium text-foreground">ページ数</span>
+            <span className="inline-flex items-center overflow-hidden rounded-md border">
+              <button
+                type="button"
+                onClick={() => void changePages(-2)}
+                disabled={pageBusy || pageCount <= 2}
+                className="px-1.5 py-0.5 hover:bg-muted disabled:opacity-40"
+                aria-label="ページを2減らす"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <span className="min-w-10 px-2 text-center font-semibold text-foreground">
+                {pageCount}P
+              </span>
+              <button
+                type="button"
+                onClick={() => void changePages(2)}
+                disabled={pageBusy}
+                className="px-1.5 py-0.5 hover:bg-muted disabled:opacity-40"
+                aria-label="ページを2増やす"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          </span>
+        ) : (
+          <span>{pageCount}ページ構成</span>
+        )}
         <span>・</span>
         <span>確保枠 {slots.length} 件</span>
         <span>・</span>

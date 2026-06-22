@@ -192,6 +192,17 @@ function SalesSettings() {
   });
   const [savingUnit, setSavingUnit] = useState(false);
 
+  // 目標ページ単価（売上目標の自動算出用）の草稿
+  const [targetDraft, setTargetDraft] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const m of ORDER_MEDIA) {
+      const v = config.targetPageUnitPrice?.[m.id];
+      init[m.id] = v != null ? String(v) : "";
+    }
+    return init;
+  });
+  const [savingTarget, setSavingTarget] = useState(false);
+
   async function saveUnitPrices() {
     const next: Partial<Record<MediaId, number>> = {};
     for (const m of ORDER_MEDIA) {
@@ -205,6 +216,22 @@ function SalesSettings() {
       else toast.error("保存に失敗しました");
     } finally {
       setSavingUnit(false);
+    }
+  }
+
+  async function saveTargetPrices() {
+    const next: Partial<Record<MediaId, number>> = {};
+    for (const m of ORDER_MEDIA) {
+      const n = Number((targetDraft[m.id] ?? "").replace(/[^\d.-]/g, ""));
+      if (Number.isFinite(n) && n > 0) next[m.id] = n;
+    }
+    setSavingTarget(true);
+    try {
+      const ok = await setSalesConfig({ targetPageUnitPrice: next });
+      if (ok) toast.success("目標ページ単価を保存しました");
+      else toast.error("保存に失敗しました");
+    } finally {
+      setSavingTarget(false);
     }
   }
 
@@ -243,6 +270,42 @@ function SalesSettings() {
         </div>
         <Button className="mt-3" onClick={() => void saveUnitPrices()} disabled={savingUnit}>
           {savingUnit ? "保存中…" : "ページ単価を保存"}
+        </Button>
+      </div>
+
+      {/* 目標ページ単価（売上目標の自動算出） */}
+      <div className="border-t pt-5">
+        <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+          <Coins className="h-4 w-4" />
+          目標ページ単価（売上目標）
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          1ページあたりの売上目標。<strong>売上目標 = 目標ページ単価 × 台割ページ数</strong>
+          で各号に自動反映されます（ダッシュボードで号ごとに手入力した目標があれば、そちらが優先されます）。
+        </p>
+        <div className="space-y-2">
+          {ORDER_MEDIA.map((m) => (
+            <div key={m.id} className="flex items-center gap-2">
+              <span className="w-28 shrink-0 text-sm">{m.name}</span>
+              <div className="relative flex-1">
+                <Input
+                  value={targetDraft[m.id] ?? ""}
+                  onChange={(e) =>
+                    setTargetDraft((d) => ({ ...d, [m.id]: e.target.value }))
+                  }
+                  placeholder="例: 120000"
+                  inputMode="numeric"
+                  className="pr-16"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  円/ページ
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <Button className="mt-3" onClick={() => void saveTargetPrices()} disabled={savingTarget}>
+          {savingTarget ? "保存中…" : "目標ページ単価を保存"}
         </Button>
       </div>
 

@@ -154,12 +154,25 @@ interface StoreState {
   ensureOrderSheet: (mediaId: MediaId) => Promise<string | null>;
   /** 指定媒体の受注シートを読み、受注行へパースして返す */
   fetchOrders: (mediaId: MediaId) => Promise<OrderRow[] | null>;
-  /** 受注1件を「単一エリア版」の号へ取り込み、媒体・版ごとの取込記録を残す */
+  /** 号（割付）のページ数を変更する。減らす際は対象ページの枠を空きへ自動移動し、入り切らなければ中止して overflow を返す */
+  setIssuePageCount: (
+    issueId: string,
+    pageCount: number,
+  ) => Promise<{ ok: boolean; moved: number; overflow: number }>;
+  /**
+   * 受注1件を「単一エリア版」の号へ取り込み、媒体・版ごとの取込記録を残す。
+   * 対象の割付（号）が未作成なら取り込まず noLayout を返す（割付作成が起点）。
+   */
   importOrderArea: (
     mediaId: MediaId,
     order: OrderRow,
     areaId: string,
-  ) => Promise<{ slotsCreated: number; issuesCreated: number; alreadyTaken?: boolean } | null>;
+  ) => Promise<{
+    slotsCreated: number;
+    issuesCreated: number;
+    alreadyTaken?: boolean;
+    noLayout?: boolean;
+  } | null>;
 
   // 売上ダッシュボード設定（目標・原価単価・企画マスタ）
   /** 売上設定を部分更新して Drive へ保存 */
@@ -413,10 +426,8 @@ export const useStore = create<StoreState>((set, get) => ({
   importOrderArea: async (mediaId, order, areaId) => {
     const db = get().db;
     const now = new Date().toISOString();
-    const me = get().user?.email ?? null;
     const size = mapOrderSize(order.size);
     const pageDefault = MEDIA[mediaId].pageOptions?.[0] ?? 16;
-    const areas = MEDIA[mediaId].areas ?? [];
 
     if (!order.year || !order.month) {
       set({ error: "発行年・月が未入力です" });
@@ -434,12 +445,11 @@ export const useStore = create<StoreState>((set, get) => ({
       return { slotsCreated: 0, issuesCreated: 0, alreadyTaken: true };
     }
 
-    const newIssues: Issue[] = [];
     const newSlots: LayoutSlot[] = [];
-    let issuesCreated = 0;
 
-    // 媒体 × エリア版 × 年 × 月 で号を特定（無ければ作成）
-    let issue =
+    // 媒体 × エリア版 × 年 × 月 で号（割付）を特定。
+    // 割付が無ければ取り込まない（「割付作成」が起点。号の自動生成はしない）。
+    const issue =
       db.issues.find(
         (i) =>
           i.media_id === mediaId &&
@@ -448,21 +458,7 @@ export const useStore = create<StoreState>((set, get) => ({
           i.month === order.month,
       ) ?? null;
     if (!issue) {
-      const areaName = areas.find((a) => a.id === areaId)?.name ?? "";
-      issue = {
-        id: uid(),
-        media_id: mediaId,
-        name: `${order.year ?? "—"}年${order.month ?? "—"}月号（${areaName}）`,
-        area: areaId,
-        year: order.year,
-        month: order.month,
-        page_count: pageDefault,
-        created_by: me,
-        created_at: now,
-        updated_at: now,
-      };
-      newIssues.push(issue);
-      issuesCreated++;
+      return { slotsCreated: 0, issuesCreated: 0, noLayout: true };
     }
 
     // 空きのある最初のページへ枠を生成（無ければ P1）
@@ -505,12 +501,86 @@ export const useStore = create<StoreState>((set, get) => ({
     const take = { mediaId, key, areaId, issueId, takenAt: now };
     const ok = await get().commit({
       ...db,
-      issues: [...newIssues, ...db.issues],
       slots: [...db.slots, ...newSlots],
       orderTakes: [...takes, take],
       updatedAt: now,
     });
-    return ok ? { slotsCreated: newSlots.length, issuesCreated } : null;
+    return ok ? { slotsCreated: newSlots.length, issuesCreated: 0 } : null;
+  },
+
+  setIssuePageCount: async (issueId, pageCount) => {
+    const db = get().db;
+    const now = new Date().toISOString();
+    const issue = db.issues.find((i) => i.id === issueId);
+    const next = Math.max(1, Math.floor(pageCount));
+    if (!issue) return { ok: false, moved: 0, overflow: 0 };
+
+    const updateIssue = (slots: LayoutSlot[]) =>
+      get().commit({
+        ...db,
+        issues: db.issues.map((i) =>
+          i.id === issueId ? { ...i, page_count: next, updated_at: now } : i,
+        ),
+        slots,
+        updatedAt: now,
+      });
+
+    // 増やす / 同じ → 枠はそのまま、ページ数だけ更新
+    const current = issue.page_count ?? 0;
+    if (next >= current) {
+      const ok = await updateIssue(db.slots);
+      return { ok, moved: 0, overflow: 0 };
+    }
+
+    // 減らす → 範囲外ページ(>next)の枠を、残ページ(1..next)の空きへ自動移動
+    const all = db.slots.filter((s) => s.issue_id === issueId);
+    const working = all
+      .filter((s) => s.page_no <= next)
+      .map((s) => ({ ...s }));
+    const toMove = all
+      .filter((s) => s.page_no > next)
+      // 大きい枠から先に配置（入り切らなさを減らす）
+      .sort((a, b) => {
+        const sa = sizeSpan(a.size);
+        const sb = sizeSpan(b.size);
+        return sb.col * sb.row - sa.col * sa.row;
+      });
+
+    const moved: LayoutSlot[] = [];
+    let overflow = 0;
+    for (const slot of toMove) {
+      const span = sizeSpan(slot.size);
+      let placed: { page: number; col: number; row: number } | null = null;
+      for (let p = 1; p <= next; p++) {
+        const pageSlots = working.filter((s) => s.page_no === p);
+        const free = findFreeCell(occupancyExcluding(pageSlots, ""), span);
+        if (free) {
+          placed = { page: p, col: free.col, row: free.row };
+          break;
+        }
+      }
+      if (!placed) {
+        overflow++;
+        continue;
+      }
+      const nm: LayoutSlot = {
+        ...slot,
+        page_no: placed.page,
+        col: placed.col,
+        row: placed.row,
+        updated_at: now,
+      };
+      working.push(nm);
+      moved.push(nm);
+    }
+
+    // 1件でも入り切らなければ中止（ページ数は変えない）
+    if (overflow > 0) return { ok: false, moved: 0, overflow };
+
+    const movedById = new Map(moved.map((m) => [m.id, m]));
+    const nextSlots = db.slots.map((s) => movedById.get(s.id) ?? s);
+    const ok = await updateIssue(nextSlots);
+    return { ok, moved: moved.length, overflow: 0 };
   },
 
   setSalesConfig: async (patch) => {

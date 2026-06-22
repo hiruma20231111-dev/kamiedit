@@ -126,7 +126,8 @@ export function aggregateIssueSales(
   const fillRate = totalCells > 0 ? usedCells / totalCells : 0;
 
   // 売上目標・達成率（号×版）
-  const target =
+  // 手入力の目標（号×版）があれば優先。無ければ「目標ページ単価 × 台割page_count」で自動算出。
+  const explicitTarget =
     cfg?.targets.find(
       (t) =>
         t.mediaId === mediaId &&
@@ -134,6 +135,12 @@ export function aggregateIssueSales(
         t.year === year &&
         t.month === month,
     )?.amount ?? null;
+  const targetUnit = cfg?.targetPageUnitPrice?.[mediaId];
+  const autoTarget =
+    targetUnit != null && targetUnit > 0 && pageCount != null
+      ? targetUnit * pageCount
+      : null;
+  const target = explicitTarget != null ? explicitTarget : autoTarget;
   const achievement = target && target > 0 ? amount / target : null;
 
   // 原価・粗利（原価 = ページ単価 × 台割page_count）

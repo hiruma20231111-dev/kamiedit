@@ -42,14 +42,16 @@ export interface PlanMaster {
 export interface SalesConfig {
   /** 媒体ごとのページ単価（原価/ページ）。原価 = 単価 × 台割page_count */
   pageUnitPrice: Partial<Record<MediaId, number>>;
-  /** 号ごと×エリア版の売上目標 */
+  /** 媒体ごとの目標ページ単価（売上目標/ページ）。売上目標 = 単価 × 台割page_count（号×版の手入力があればそちら優先） */
+  targetPageUnitPrice: Partial<Record<MediaId, number>>;
+  /** 号ごと×エリア版の売上目標（手入力。設定があればページ数からの自動算出に優先する） */
   targets: SalesTarget[];
   /** 企画/特集マスタ */
   plans: PlanMaster[];
 }
 
 export function emptySalesConfig(): SalesConfig {
-  return { pageUnitPrice: {}, targets: [], plans: [] };
+  return { pageUnitPrice: {}, targetPageUnitPrice: {}, targets: [], plans: [] };
 }
 
 /**
@@ -116,14 +118,17 @@ function normalizeSalesConfig(raw: unknown): SalesConfig {
   const base = emptySalesConfig();
   if (!raw || typeof raw !== "object") return base;
   const r = raw as Partial<SalesConfig>;
-  const pageUnitPrice: Partial<Record<MediaId, number>> = {};
-  if (r.pageUnitPrice && typeof r.pageUnitPrice === "object") {
-    for (const [k, v] of Object.entries(r.pageUnitPrice)) {
-      if (typeof v === "number" && Number.isFinite(v)) {
-        pageUnitPrice[k as MediaId] = v;
+  const numMap = (src: unknown): Partial<Record<MediaId, number>> => {
+    const out: Partial<Record<MediaId, number>> = {};
+    if (src && typeof src === "object") {
+      for (const [k, v] of Object.entries(src)) {
+        if (typeof v === "number" && Number.isFinite(v)) out[k as MediaId] = v;
       }
     }
-  }
+    return out;
+  };
+  const pageUnitPrice = numMap(r.pageUnitPrice);
+  const targetPageUnitPrice = numMap(r.targetPageUnitPrice);
   const targets = Array.isArray(r.targets)
     ? r.targets.filter(
         (t): t is SalesTarget =>
@@ -141,7 +146,7 @@ function normalizeSalesConfig(raw: unknown): SalesConfig {
           !!p && typeof p.id === "string" && typeof p.name === "string",
       )
     : [];
-  return { pageUnitPrice, targets, plans };
+  return { pageUnitPrice, targetPageUnitPrice, targets, plans };
 }
 
 /** 媒体ごとの受注シートを正規化。旧 orderSheetId はまみたんへ移行する */

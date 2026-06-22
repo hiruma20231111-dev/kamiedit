@@ -15,6 +15,7 @@ export default function OrdersPage() {
   const signedIn = useStore((s) => s.signedIn);
   const orderSheets = useStore((s) => s.db.orderSheets ?? {});
   const orderTakes = useStore((s) => s.db.orderTakes ?? []);
+  const issues = useStore((s) => s.db.issues);
   const fetchOrders = useStore((s) => s.fetchOrders);
   const importOrderArea = useStore((s) => s.importOrderArea);
 
@@ -56,6 +57,22 @@ export default function OrdersPage() {
         (t) => t.mediaId === mediaId && t.key === orderKey(o) && t.areaId === areaId,
       ),
     [orderTakes, mediaId],
+  );
+
+  // その受注の発行号×版に対応する割付（号）が既に作成済みか。
+  // 割付が起点 — 無ければ取り込めない。
+  const hasLayout = useCallback(
+    (o: OrderRow, areaId: string) =>
+      o.year != null &&
+      o.month != null &&
+      issues.some(
+        (i) =>
+          i.media_id === mediaId &&
+          i.area === areaId &&
+          i.year === o.year &&
+          i.month === o.month,
+      ),
+    [issues, mediaId],
   );
 
   // エリア版ごとに受注を仕分け（その媒体の全版を常に保持）。
@@ -102,6 +119,10 @@ export default function OrdersPage() {
     setImporting(null);
     if (!res) {
       toast.error("取込に失敗しました");
+      return;
+    }
+    if (res.noLayout) {
+      toast.error("対象の割付がありません。先にこの号の割付を作成してください");
       return;
     }
     if (res.alreadyTaken) {
@@ -283,6 +304,7 @@ export default function OrdersPage() {
                   const k = `${o.rowIndex}-${g.area.id}`;
                   const sizeOk = isKnownSize(o.size);
                   const needsYm = !o.year || !o.month;
+                  const layoutReady = hasLayout(o, g.area.id);
                   return (
                     <Card key={k} className={`p-4 ${taken ? "opacity-60" : ""}`}>
                       <div className="flex flex-wrap items-center gap-2">
@@ -324,9 +346,15 @@ export default function OrdersPage() {
                       )}
 
                       {/* 警告 */}
-                      {(!sizeOk || needsYm) && !taken && (
+                      {(!sizeOk || needsYm || (!layoutReady && !taken)) && !taken && (
                         <div className="mt-2 space-y-0.5 text-xs text-amber-600">
                           {needsYm && <p>⚠ 発行年・月が未入力です（フォーム側で記入してください）</p>}
+                          {!needsYm && !layoutReady && (
+                            <p>
+                              ⚠ {o.year}年{o.month}月号（{g.area.name}）の割付が未作成です。
+                              先に割付を作成すると取り込めます。
+                            </p>
+                          )}
                           {!sizeOk && (
                             <p>
                               ⚠ サイズ{o.size ? `「${o.size}」は未知` : "未指定"}
@@ -336,17 +364,24 @@ export default function OrdersPage() {
                         </div>
                       )}
 
-                      <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex justify-end gap-2">
                         {taken ? (
                           <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
                             <Check className="h-4 w-4" />
                             {g.area.name}に取込済
                           </span>
+                        ) : !layoutReady && !needsYm ? (
+                          <Link
+                            href={`/${mediaId}`}
+                            className={buttonVariants({ variant: "outline", size: "sm" })}
+                          >
+                            割付を作成する
+                          </Link>
                         ) : (
                           <Button
                             size="sm"
                             onClick={() => void handleImportArea(o, g.area.id)}
-                            disabled={importing === k || needsYm}
+                            disabled={importing === k || needsYm || !layoutReady}
                           >
                             {importing === k ? "取込中…" : `${g.area.name}に取込`}
                           </Button>

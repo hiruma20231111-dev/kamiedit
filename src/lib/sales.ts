@@ -38,22 +38,16 @@ export interface IssueSales {
   usedCells: number;
   totalCells: number;
   pageCount: number | null;
-  /** 広告キャパ（マス）= 総マス − 非広告枠(自社稿/巻頭/表紙)の占有マス */
-  adCells: number;
-  /** 広告キャパのページ換算（adCells / 8） */
-  adPages: number;
-  /** 広告枠の使用マス */
-  usedAdCells: number;
-  /** 広告枠の埋まり具合（0..1）= 使用広告マス / 広告キャパ */
-  adFillRate: number;
   /** 売上目標（号×版）。未設定は null */
   target: number | null;
   /** 達成率（実績/目標）。目標未設定は null */
   achievement: number | null;
-  /** 発行原価 = ページ単価 × 台割page_count。単価未設定・号未作成は null */
+  /** 発行原価（税込概算）。エリア版×ページ数の原価表から引く（無ければページ単価×page_count）。不明は null */
   cost: number | null;
-  /** 広告1ページあたり原価 = 発行原価 / 広告ページ数（広告のみで原価を割る）。算出不可は null */
-  adPageCost: number | null;
+  /** 原価が原価表からの値なら true（フォールバック計算なら false） */
+  costFromTable: boolean;
+  /** 1ページ按分額 = 発行原価 / 総ページ数。算出不可は null */
+  pagePortion: number | null;
   /** 原価回収率（現在地）= 売上実績 / 発行原価。原価不明は null */
   costRecovery: number | null;
   /** 粗利 = 実績 − 原価。原価不明は null */
@@ -70,12 +64,10 @@ export interface MediaTotals {
   /** 各版の原価合計（1つでも単価設定があれば数値、無ければ null） */
   cost: number | null;
   profit: number | null;
-  /** 広告1ページあたり原価（合計原価 / 合計広告ページ数） */
-  adPageCost: number | null;
+  /** 1ページ按分額（合計原価 / 合計総ページ数） */
+  pagePortion: number | null;
   /** 原価回収率（現在地）= 合計売上 / 合計原価 */
   costRecovery: number | null;
-  /** 合計広告ページ数 */
-  adPages: number;
   /** 受注のある版数 */
   areaCount: number;
 }
@@ -133,26 +125,14 @@ export function aggregateIssueSales(
         i.month === month,
     ) ?? null;
   let usedCells = 0;
-  let nonAdCells = 0;
-  let usedAdCells = 0;
   const pageCount = issue?.page_count ?? null;
   if (issue) {
     for (const s of db.slots.filter((s) => s.issue_id === issue.id)) {
-      const u = Math.min(sizeUnits(s.size), CELLS_PER_PAGE);
-      usedCells += u;
-      // 自社稿/巻頭記事/表紙は売上対象外（広告枠ではない）
-      const nonAd =
-        s.kind === "inhouse" || s.kind === "lead" || s.kind === "cover";
-      if (nonAd) nonAdCells += u;
-      else usedAdCells += u;
+      usedCells += Math.min(sizeUnits(s.size), CELLS_PER_PAGE);
     }
   }
   const totalCells = pageCount ? pageCount * CELLS_PER_PAGE : 0;
   const fillRate = totalCells > 0 ? usedCells / totalCells : 0;
-  // 広告に使えるキャパ（非広告枠が占めるぶんを除く）
-  const adCells = Math.max(0, totalCells - nonAdCells);
-  const adPages = adCells / CELLS_PER_PAGE;
-  const adFillRate = adCells > 0 ? usedAdCells / adCells : 0;
 
   // 売上目標・達成率（号×版）
   // 手入力の目標（号×版）があれば優先。無ければ「目標ページ単価 × 台割page_count」で自動算出。
@@ -172,13 +152,27 @@ export function aggregateIssueSales(
   const target = explicitTarget != null ? explicitTarget : autoTarget;
   const achievement = target && target > 0 ? amount / target : null;
 
-  // 原価・粗利（発行原価 = ページ単価 × 台割page_count）
+  // 発行原価：まずエリア版×ページ数の原価表から引く。無ければページ単価×page_countにフォールバック。
+  const tableCost =
+    pageCount != null
+      ? (cfg?.costEntries.find(
+          (c) =>
+            c.mediaId === mediaId &&
+            c.areaId === areaId &&
+            c.pageCount === pageCount,
+        )?.cost ?? null)
+      : null;
   const unit = cfg?.pageUnitPrice?.[mediaId];
-  const cost =
+  const fallbackCost =
     unit != null && unit > 0 && pageCount != null ? unit * pageCount : null;
+  const cost = tableCost != null ? tableCost : fallbackCost;
+  const costFromTable = tableCost != null;
   const profit = cost != null ? amount - cost : null;
-  // 広告1ページあたり原価（発行原価を広告ページ数で割る）と原価回収率（現在地）
-  const adPageCost = cost != null && adPages > 0 ? cost / adPages : null;
+  // 1ページ按分額 = 発行原価 ÷ 総ページ数、原価回収率（現在地）= 売上 ÷ 発行原価
+  const pagePortion =
+    cost != null && pageCount != null && pageCount > 0
+      ? cost / pageCount
+      : null;
   const costRecovery = cost != null && cost > 0 ? amount / cost : null;
 
   // 企画別目標をマスタから付与し、受注ゼロでも目標がある企画は補完する
@@ -208,14 +202,11 @@ export function aggregateIssueSales(
     usedCells,
     totalCells,
     pageCount,
-    adCells,
-    adPages,
-    usedAdCells,
-    adFillRate,
     target,
     achievement,
     cost,
-    adPageCost,
+    costFromTable,
+    pagePortion,
     costRecovery,
     profit,
   };
@@ -229,7 +220,7 @@ export function aggregateMediaTotals(results: IssueSales[]): MediaTotals {
   let hasTarget = false;
   let cost = 0;
   let hasCost = false;
-  let adPages = 0;
+  let totalPages = 0;
   for (const r of results) {
     amount += r.amount;
     count += r.count;
@@ -240,7 +231,7 @@ export function aggregateMediaTotals(results: IssueSales[]): MediaTotals {
     if (r.cost != null) {
       cost += r.cost;
       hasCost = true;
-      adPages += r.adPages;
+      totalPages += r.pageCount ?? 0;
     }
   }
   const t = hasTarget ? target : null;
@@ -252,9 +243,8 @@ export function aggregateMediaTotals(results: IssueSales[]): MediaTotals {
     achievement: t && t > 0 ? amount / t : null,
     cost: c,
     profit: c != null ? amount - c : null,
-    adPageCost: c != null && adPages > 0 ? c / adPages : null,
+    pagePortion: c != null && totalPages > 0 ? c / totalPages : null,
     costRecovery: c != null && c > 0 ? amount / c : null,
-    adPages,
     areaCount: results.filter((r) => r.count > 0).length,
   };
 }

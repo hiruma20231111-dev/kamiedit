@@ -29,6 +29,14 @@ export interface SalesTarget {
   amount: number;
 }
 
+/** エリア版×ページ数 の発行原価（税込概算）。1件＝媒体×版×ページ数→金額 */
+export interface CostEntry {
+  mediaId: MediaId;
+  areaId: string;
+  pageCount: number;
+  cost: number;
+}
+
 /** 企画/特集マスタ（任意で企画別の目標売上も持てる） */
 export interface PlanMaster {
   id: string;
@@ -44,6 +52,8 @@ export interface SalesConfig {
   pageUnitPrice: Partial<Record<MediaId, number>>;
   /** 媒体ごとの目標ページ単価（売上目標/ページ）。売上目標 = 単価 × 台割page_count（号×版の手入力があればそちら優先） */
   targetPageUnitPrice: Partial<Record<MediaId, number>>;
+  /** エリア版×ページ数の発行原価表（税込概算）。発行原価はまずこの表から引き、無ければページ単価×ページ数にフォールバック */
+  costEntries: CostEntry[];
   /** 号ごと×エリア版の売上目標（手入力。設定があればページ数からの自動算出に優先する） */
   targets: SalesTarget[];
   /** 企画/特集マスタ */
@@ -51,7 +61,13 @@ export interface SalesConfig {
 }
 
 export function emptySalesConfig(): SalesConfig {
-  return { pageUnitPrice: {}, targetPageUnitPrice: {}, targets: [], plans: [] };
+  return {
+    pageUnitPrice: {},
+    targetPageUnitPrice: {},
+    costEntries: [],
+    targets: [],
+    plans: [],
+  };
 }
 
 /**
@@ -146,7 +162,17 @@ function normalizeSalesConfig(raw: unknown): SalesConfig {
           !!p && typeof p.id === "string" && typeof p.name === "string",
       )
     : [];
-  return { pageUnitPrice, targetPageUnitPrice, targets, plans };
+  const costEntries = Array.isArray(r.costEntries)
+    ? r.costEntries.filter(
+        (c): c is CostEntry =>
+          !!c &&
+          typeof c.mediaId === "string" &&
+          typeof c.areaId === "string" &&
+          typeof c.pageCount === "number" &&
+          typeof c.cost === "number",
+      )
+    : [];
+  return { pageUnitPrice, targetPageUnitPrice, costEntries, targets, plans };
 }
 
 /** 媒体ごとの受注シートを正規化。旧 orderSheetId はまみたんへ移行する */

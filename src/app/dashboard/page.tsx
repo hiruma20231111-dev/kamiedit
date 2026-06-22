@@ -233,13 +233,8 @@ export default function DashboardPage() {
                 </span>
               </span>
               <span className="text-muted-foreground">
-                広告1P原価{" "}
-                {totals.adPageCost != null ? yen(totals.adPageCost) : "—"}
-                {totals.adPages > 0 && (
-                  <span className="ml-1 text-xs">
-                    （広告{Math.round(totals.adPages * 10) / 10}P）
-                  </span>
-                )}
+                1P按分額{" "}
+                {totals.pagePortion != null ? yen(totals.pagePortion) : "—"}
               </span>
               <span className="text-muted-foreground">
                 粗利{" "}
@@ -411,10 +406,7 @@ function AreaCard({
             </span>
           </span>
           <span>
-            広告1P原価 {r.adPageCost != null ? yen(r.adPageCost) : "—"}
-            {r.adPages > 0 && (
-              <span className="ml-0.5">（広告{Math.round(r.adPages * 10) / 10}P）</span>
-            )}
+            1P按分額 {r.pagePortion != null ? yen(r.pagePortion) : "—"}
           </span>
           <span>
             粗利{" "}

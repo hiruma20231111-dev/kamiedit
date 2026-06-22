@@ -6,7 +6,7 @@ import { getGeminiKey, setGeminiKey } from "@/lib/profile";
 import { GEMINI_MODEL } from "@/lib/gemini";
 import { useStore } from "@/lib/store";
 import { MEDIA, ORDER_MEDIA, type MediaId } from "@/lib/config/media";
-import { emptySalesConfig, type PlanMaster } from "@/lib/db";
+import { emptySalesConfig, type PlanMaster, type CostEntry } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -309,6 +309,24 @@ function SalesSettings() {
         </Button>
       </div>
 
+      {/* 発行原価表（エリア版×ページ数） */}
+      <div className="border-t pt-5">
+        <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold">
+          <Coins className="h-4 w-4" />
+          発行原価表（エリア版×ページ数・税込概算）
+        </div>
+        <p className="mb-3 text-xs text-muted-foreground">
+          ページ数によって原価は段階的に変わります。エリア版ごとに発行原価を入力すると、
+          <strong>発行原価・粗利・原価回収率</strong>と<strong>1ページ按分額（＝発行原価÷ページ数）</strong>が各号に反映されます。
+          空欄の組み合わせは上の「ページ単価×ページ数」で概算します。
+        </p>
+        <div className="space-y-5">
+          {ORDER_MEDIA.map((m) => (
+            <CostTableEditor key={m.id} mediaId={m.id} />
+          ))}
+        </div>
+      </div>
+
       {/* 企画／特集マスタ */}
       <div className="border-t pt-5">
         <div className="mb-2 text-sm font-semibold">企画／特集マスタ</div>
@@ -321,6 +339,107 @@ function SalesSettings() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 発行原価表の標準ページ数（列） */
+const COST_TIERS = [16, 24, 32, 40, 48];
+
+/** 1媒体ぶんの発行原価表（エリア版×ページ数）の編集 */
+function CostTableEditor({ mediaId }: { mediaId: MediaId }) {
+  const media = MEDIA[mediaId];
+  const areas = media.areas ?? [];
+  const allEntries = useStore((s) => s.db.salesConfig?.costEntries ?? []);
+  const setSalesConfig = useStore((s) => s.setSalesConfig);
+  const cellKey = (areaId: string, tier: number) => `${areaId}__${tier}`;
+  const [draft, setDraft] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const a of areas) {
+      for (const t of COST_TIERS) {
+        const v = allEntries.find(
+          (c) => c.mediaId === mediaId && c.areaId === a.id && c.pageCount === t,
+        )?.cost;
+        init[cellKey(a.id, t)] = v != null ? String(v) : "";
+      }
+    }
+    return init;
+  });
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    const mine: CostEntry[] = [];
+    for (const a of areas) {
+      for (const t of COST_TIERS) {
+        const n = Number((draft[cellKey(a.id, t)] ?? "").replace(/[^\d.-]/g, ""));
+        if (Number.isFinite(n) && n > 0) {
+          mine.push({ mediaId, areaId: a.id, pageCount: t, cost: n });
+        }
+      }
+    }
+    const others = allEntries.filter((c) => c.mediaId !== mediaId);
+    setSaving(true);
+    try {
+      const ok = await setSalesConfig({ costEntries: [...others, ...mine] });
+      if (ok) toast.success(`${media.name}の発行原価を保存しました`);
+      else toast.error("保存に失敗しました");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (areas.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border p-3">
+      <div className="mb-2 text-sm font-semibold">{media.name}</div>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr>
+              <th className="p-1 text-left font-medium text-muted-foreground">
+                エリア版
+              </th>
+              {COST_TIERS.map((t) => (
+                <th
+                  key={t}
+                  className="p-1 text-right font-medium text-muted-foreground"
+                >
+                  {t}P
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {areas.map((a) => (
+              <tr key={a.id}>
+                <td className="whitespace-nowrap p-1 pr-2 align-middle">
+                  {a.name}
+                </td>
+                {COST_TIERS.map((t) => (
+                  <td key={t} className="p-0.5">
+                    <Input
+                      value={draft[cellKey(a.id, t)] ?? ""}
+                      onChange={(e) =>
+                        setDraft((d) => ({
+                          ...d,
+                          [cellKey(a.id, t)]: e.target.value,
+                        }))
+                      }
+                      placeholder="—"
+                      inputMode="numeric"
+                      className="h-7 w-24 text-right text-xs"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Button className="mt-2" size="sm" onClick={() => void save()} disabled={saving}>
+        {saving ? "保存中…" : `${media.name}の原価を保存`}
+      </Button>
     </div>
   );
 }
